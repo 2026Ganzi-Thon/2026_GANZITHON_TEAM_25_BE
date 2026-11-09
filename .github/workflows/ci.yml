@@ -1,0 +1,39 @@
+name: CI
+
+# PR에서 자동으로 도는 유일한 검사. 이게 없으면 각자 로컬 `./mvnw test`가 유일한 근거가 되고,
+# 누가 깨진 걸 push해도 PR에서 잡히지 않는다. (결선 체크리스트: "AI생성코드 검증·테스트 근거")
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: 테스트 (H2 — docker-compose의 실제 MySQL 8.4는 로컬에서 별도 확인)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: ./mvnw test
+        run: ./mvnw --batch-mode --no-transfer-progress test
+
+      - name: 실패 시 surefire 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7

@@ -1,0 +1,52 @@
+server:
+  port: 8081 # Coffeul 등 다른 프로젝트가 로컬에서 8080을 쓰는 경우가 많아 겹치지 않게 분리
+
+spring:
+  application:
+    name: mongle-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3308/mongle?serverTimezone=UTC&characterEncoding=UTF-8}
+    username: ${DB_USERNAME:mongle}
+    password: ${DB_PASSWORD:mongle-dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway가 관리한다 — Hibernate가 임의로 테이블을 고치지 않는다
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+mongle:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:*}
+  jwt:
+    secret: ${JWT_SECRET:}
+    expiration-days: 365
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: gemini-3.5-flash
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    timeout-ms: 3000
+  reflections:
+    max-per-session: 20
+  # 명세서 4.3.1 1차 리스트(초안) — 팀 검수 필요. 쉼표로만 구분, 공백은 trim된다.
+  risk:
+    keywords: 자살,죽고싶,죽어버리,자해,손목,칼로,사라지고싶,때렸,폭행,맞았,스토킹,미행,찾아올까봐,협박,죽인다,죽일거야
+  memory:
+    soft-limit: 30
+    preview-ttl-minutes: 30
+  session:
+    expire-after-hours: 24
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.mongle.backend: INFO

@@ -1,0 +1,45 @@
+# 프런트/디자인 팀원이 서버를 직접 띄워보기 위한 로컬 개발용 구성. `docker compose up --build`.
+# 아래 비밀번호는 전부 이 로컬 컨테이너에서만 쓰는 가짜 값이다. 운영 값과 무관하다.
+#
+#   mysql     MySQL 8.4 (운영과 같은 버전). 호스트 포트 3308 — 로컬에 MySQL이 이미 있어도 안 부딪히게.
+#   backend   이 레포를 빌드한 Spring Boot 서버. Flyway가 스키마를 만든다. 호스트 포트 8081.
+#             GEMINI_API_KEY는 .env에서 읽는다 — 없으면 reflections는 전부 폴백 문구로 응답한다
+#             (에러는 아니다. API_명세서_v1 4.3 참고).
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: mongle
+      MYSQL_USER: mongle
+      MYSQL_PASSWORD: mongle-dev
+      MYSQL_ROOT_PASSWORD: mongle-dev-root
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pmongle-dev-root"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/mongle?serverTimezone=UTC&characterEncoding=UTF-8
+      DB_USERNAME: mongle
+      DB_PASSWORD: mongle-dev
+      JWT_SECRET: ${JWT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8081:8081"
+
+volumes:
+  mysql-data:

@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:mongle;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+mongle:
+  jwt:
+    secret: test-only-secret-key-not-for-production-use-0123456789
+    expiration-days: 365
+  gemini:
+    api-key: ""
+    model: gemini-3.5-flash
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    timeout-ms: 3000
+  reflections:
+    max-per-session: 20
+  risk:
+    keywords: 자살,죽고싶,죽어버리,자해,손목,칼로,사라지고싶,때렸,폭행,맞았,스토킹,미행,찾아올까봐,협박,죽인다,죽일거야
+  memory:
+    soft-limit: 30
+    preview-ttl-minutes: 30
+  session:
+    expire-after-hours: 24
