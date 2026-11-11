@@ -79,7 +79,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | 항목 | 근거 |
 |---|---|
 | userId는 토큰에서만 추출 | 전체 DTO(`*/dto/*Request.java`) grep — `userId` 필드를 받는 요청 DTO 없음. 유일하게 `userId`가 있는 응답 DTO(`AnonymousAuthResponse`)는 서버→클라이언트 방향이라 무관 |
-| 소유권 체크(`id + user_id`) | `MemoryService.findOwned`·`SessionService.findOwned`가 `findById` 후 `isOwnedBy()`로 검증(엔티티 메서드로 캡슐화). `PreferenceService`는 애초에 `user_id` 자체가 PK라 교차 접근이 구조적으로 불가능. 전부 테스트로 403/격리 확인됨(`MemoryControllerTest`·`SessionControllerTest`·`PreferenceControllerTest`) |
+| 소유권 체크(`id + user_id`) | `MemoryService.findOwned`·`SessionService.findOwned`가 `findById` 후 `isOwnedBy()`로 검증(엔티티 메서드로 캡슐화). `MemoryService.preview`도 요약 생성 전에 `SessionService.verifyOwned`로 세션 소유권을 확인(없으면 404, 남의 세션이면 403 — 타인 대화 요약 유출 차단, 2026-11-11 수정). `PreferenceService`는 애초에 `user_id` 자체가 PK라 교차 접근이 구조적으로 불가능. 전부 테스트로 403/격리 확인됨(`MemoryControllerTest`·`SessionControllerTest`·`PreferenceControllerTest`) |
 | SQLi(파라미터 바인딩) | `@Query` 사용처 1곳(`MemoryPreviewRepository`)뿐이고 named parameter(`:cutoff`) 사용, 문자열 concat 없음. 나머지는 전부 Spring Data 메서드 이름 기반 쿼리라 바인딩 자동 처리 |
 | `.env`/비밀값 미노출 | `git ls-files`·`git log --all --full-history -- .env` 둘 다 빈 결과 — 한 번도 커밋된 적 없음 |
 | 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. `UpdatePreferenceRequest`는 필드가 전부 `Boolean`이라 애초에 붙일 어노테이션이 없고(보안 위험도 없음), 대신 진짜 문제였던 "타입 안 맞는 JSON이 명세서 포맷이 아닌 응답을 반환하는" 케이스는 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가로 해결(2026-11-11, 테스트로 재확인) |

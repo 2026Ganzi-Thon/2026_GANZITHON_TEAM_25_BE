@@ -24,9 +24,9 @@ class MemoryControllerTest extends AbstractIntegrationTest {
     @Autowired private AuthTestSupport authTestSupport;
 
     @Test
-    void 세션이_없어도_기억_미리보기를_만들고_승인할_수_있다() throws Exception {
+    void 내_세션으로_기억_미리보기를_만들고_승인할_수_있다() throws Exception {
         String token = authTestSupport.newUserToken();
-        String sessionId = java.util.UUID.randomUUID().toString(); // reflections 없이도 preview 자체는 동작해야 함
+        String sessionId = startSession(token); // reflections 없이도 preview 자체는 동작해야 함
 
         String previewResponse = mockMvc.perform(post("/memories/preview")
                         .header("Authorization", "Bearer " + token)
@@ -49,6 +49,31 @@ class MemoryControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/memories").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.memories.length()").value(1));
+    }
+
+    @Test
+    void 존재하지_않는_세션으로_미리보기를_요청하면_404() throws Exception {
+        String token = authTestSupport.newUserToken();
+        mockMvc.perform(post("/memories/preview")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"" + java.util.UUID.randomUUID() + "\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("NOT_FOUND"));
+    }
+
+    @Test
+    void 다른_유저의_세션으로_미리보기를_요청하면_403() throws Exception {
+        String ownerToken = authTestSupport.newUserToken();
+        String sessionId = startSession(ownerToken);
+
+        String strangerToken = authTestSupport.newUserToken();
+        mockMvc.perform(post("/memories/preview")
+                        .header("Authorization", "Bearer " + strangerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"" + sessionId + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
     }
 
     @Test
@@ -100,7 +125,7 @@ class MemoryControllerTest extends AbstractIntegrationTest {
         String previewResponse = mockMvc.perform(post("/memories/preview")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sessionId\":\"" + java.util.UUID.randomUUID() + "\"}"))
+                        .content("{\"sessionId\":\"" + startSession(token) + "\"}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String previewId = objectMapper.readTree(previewResponse).get("previewId").asText();
@@ -112,5 +137,15 @@ class MemoryControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(approveResponse).get("memoryId").asText();
+    }
+
+    private String startSession(String token) throws Exception {
+        String startResponse = mockMvc.perform(post("/sessions")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryType\":\"TALK\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(startResponse).get("sessionId").asText();
     }
 }
