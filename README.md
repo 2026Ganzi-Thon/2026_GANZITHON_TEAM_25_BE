@@ -38,6 +38,12 @@ Docker 없이 전부 컨테이너로 올리고 싶으면 `docker compose up --bu
 ```
 CI(GitHub Actions)도 똑같이 Testcontainers로 돈다 — `ubuntu-latest` 러너엔 Docker가 기본으로 떠 있어서 별도 설정이 필요 없다. 즉 **로컬에서 통과하면 CI에서도 똑같이 통과한다**(둘 다 H2가 아니라 같은 실제 MySQL이라서).
 
+> **Colima 쓰는 사람만 해당**: Docker Desktop 대신 Colima를 쓰면 `./mvnw test`가 `Could not find a valid Docker environment`로 실패할 수 있다. Testcontainers 라이브러리가 Colima 소켓 경로(`~/.colima/default/docker.sock`)를 기본으로는 못 찾아서다. 이럴 땐:
+> ```bash
+> DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" TESTCONTAINERS_RYUK_DISABLED=true ./mvnw test
+> ```
+> `TESTCONTAINERS_RYUK_DISABLED`는 Colima에서 Ryuk(정리용 사이드카 컨테이너)가 종종 못 뜨는 문제 때문 — 꺼도 테스트 JVM이 정상 종료되면 Testcontainers 자체 shutdown hook이 컨테이너를 정리해서 고아 컨테이너가 안 남는다(실측 확인함). Docker Desktop을 쓰면 이 줄 자체가 필요 없다.
+
 ## 모듈 = 작업 분담 (API_명세서_v1 8장 그대로)
 
 ```
@@ -66,6 +72,19 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | 위기 응답 톤 | `SYSTEM_INSTRUCTION`에 "전화번호·기관명 직접 언급 금지" 규칙 추가 | 2026-11-09 실제 키로 위험 키워드 케이스 테스트하다가, Gemini가 자유 텍스트 응답 안에 `riskResources`(0199)와 다른 번호(1393)를 스스로 지어내는 걸 발견함. 정확한 연락처는 구조화된 `riskResources` 필드가 전담하게 하고, 모델 응답은 번호를 아예 언급 못 하게 막음(재검증 3회 완료) |
 | 테스트 DB "Docker 없이 H2" | **Testcontainers로 실제 MySQL 8.4**로 전환 | 2026-11-09, 성준님 합류 전에 CI 자동검증을 강화하기로 함 — H2와 실제 MySQL의 스키마 차이로 이미 한 번 사고(위 CHAR/VARCHAR 건)가 났던 전례가 있어서, 아예 테스트도 운영과 같은 DB로 통일. 로컬·CI 둘 다 Docker가 필요해졌다는 게 트레이드오프 |
 
+## 보안 체크리스트 셀프 감사 (2026-11-11, 결선 20점 대비)
+
+"그럴 것이다"가 아니라 실제로 grep·테스트로 근거를 확인한 결과. 전부 통과.
+
+| 항목 | 근거 |
+|---|---|
+| userId는 토큰에서만 추출 | 전체 DTO(`*/dto/*Request.java`) grep — `userId` 필드를 받는 요청 DTO 없음. 유일하게 `userId`가 있는 응답 DTO(`AnonymousAuthResponse`)는 서버→클라이언트 방향이라 무관 |
+| 소유권 체크(`id + user_id`) | `MemoryService.findOwned`·`SessionService.findOwned`가 `findById` 후 `isOwnedBy()`로 검증(엔티티 메서드로 캡슐화). `PreferenceService`는 애초에 `user_id` 자체가 PK라 교차 접근이 구조적으로 불가능. 전부 테스트로 403/격리 확인됨(`MemoryControllerTest`·`SessionControllerTest`·`PreferenceControllerTest`) |
+| SQLi(파라미터 바인딩) | `@Query` 사용처 1곳(`MemoryPreviewRepository`)뿐이고 named parameter(`:cutoff`) 사용, 문자열 concat 없음. 나머지는 전부 Spring Data 메서드 이름 기반 쿼리라 바인딩 자동 처리 |
+| `.env`/비밀값 미노출 | `git ls-files`·`git log --all --full-history -- .env` 둘 다 빈 결과 — 한 번도 커밋된 적 없음 |
+| 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. **예외 1건 발견**: `UpdatePreferenceRequest`(필드가 전부 `Boolean`이라 보안 위험은 없음, 아래 "아직 안 끝난 것" 참고) |
+| AI 생성 코드 PR 기록 | PR #1~#4는 개인 레포 기준 기록(테스트 결과 포함). **팀 레포로 이관하며 PR 히스토리 자체는 안 넘어옴** — 앞으로 팀 레포에서 만드는 PR부터는 반드시 이 체크리스트를 PR 설명에 남길 것 |
+
 ## 아직 안 끝난 것 (명세서 9장 + 이번 세팅에서 추가로 발견한 것)
 
 - ~~실 MySQL 검증~~ → **완료 (2026-11-09)**: `docker compose up -d --build backend`로 MySQL 8.4 컨테이너 위에서 Flyway 마이그레이션·Hibernate 스키마 검증·전 엔드포인트(auth→sessions→reflections→memories/preview)를 curl로 직접 확인함. H2가 아니라 실제 MySQL에서도 깨끗하게 돈다.
@@ -73,7 +92,9 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 - **위험 키워드 리스트** — `application.yml`의 `mongle.risk.keywords`. 16개 초안에서 흔한 동의어·활용형(목매·번개탄·투신·극단적 선택·맞고·쫓아온다·따라온다 등) 8개를 보강해 24개로 늘림(2026-11-09). **보강 과정에서 실제 버그 하나 발견·수정함**: `RiskKeywordDetector`가 입력 텍스트는 공백을 지우고 비교하면서 키워드 쪽은 안 지워서, `"극단적 선택"`처럼 공백 든 키워드가 조용히 매칭 안 되고 있었다(키워드 쪽도 공백 제거하도록 수정, curl로 재검증 완료). 여전히 팀 검수 필요한 초안.
 - **배포 환경** — 로컬 데모만 할지, 결선용으로 어딘가에 띄울지 아직 결정 안 됨. `Dockerfile`은 만들어뒀으니 정해지면 바로 올릴 수 있다.
 - **단일 인스턴스 가정** — `SessionContextStore`(대화 컨텍스트, rate limit)가 서버 메모리에만 있다. 여러 대로 스케일 아웃하는 순간 이 클래스부터 Redis 등으로 바꿔야 한다.
-- ~~안심콜 번호 재확인~~ → **완료 (2026-11-09, 웹서치로 확인)**: 코드의 `0199`는 `1577-0199`의 뒷자리만 딴 불완전한 번호였다. 보건복지부 기준(2024-01-01~) 자살예방상담전화는 **109**(3자리 통합번호)이고, **1577-0199**는 109로 흡수되지 않고 "정신건강 위기상담전화"로 전국 공통·24시간 별도 운영 중(129로도 연결). `1393`은 더 이상 쓰이는 독립 번호가 아니다. `RiskKeywordDetector`를 109 + 1577-0199 + 119(긴급신고) 세 개로 수정함. 다만 이건 웹서치 기준이라, **최종 배포 전엔 보건복지부·국가정신건강정보포털에서 한 번 더 공식 확인 권장** (출처: [korea.kr](https://www.korea.kr/news/policyNewsView.do?newsId=148921874), [mohw.go.kr](https://www.mohw.go.kr/menu.es?mid=a10706040100)).
+- **`preference` 모듈 테스트 공백** → **완료 (2026-11-11)**: auth/session/memory/reflection엔 통합테스트가 있는데 preference만 없었다. `PreferenceControllerTest` 추가(401, 기본값 자동생성, 부분 업데이트 유지, 유저 간 교차 오염 없음) + `docker compose`로 실제 curl까지 검증.
+- **`UpdatePreferenceRequest`에 Bean Validation 없음** — 이번 감사 중 발견. `soundEnabled` 등이 전부 `Boolean`이라 SQLi·XSS류 보안 위험은 없지만(타입 자체가 true/false만 받음), 잘못된 JSON을 보내면 우리가 정한 에러 포맷(`{"error":"VALIDATION_ERROR",...}`)이 아니라 Spring 기본 에러 응답이 나간다. 보안 이슈는 아니고 일관성 문제라 지금 당장 급하진 않음, 다음에 손댈 때 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가하면 해결됨.
+- ~~안심콜 번호 재확인~~ → **완료 (2026-11-11, 보건복지부 공식 페이지 직접 확인)**: 코드의 `0199`는 `1577-0199`의 뒷자리만 딴 불완전한 번호였다. 보건복지부 공식 페이지([mohw.go.kr](https://www.mohw.go.kr/menu.es?mid=a10706040100))에 "정신건강 위기상담전화(1577-0199) 운영 — 전국 동일번호 1577-0199, 국번 없이 129"라고 직접 명시돼 있음을 확인. 자살예방상담전화 **109**(2024-01-01~ 3자리 통합번호, 기존 1393·129 등을 흡수)도 복수의 정부/언론 출처로 교차 확인(출처: [korea.kr](https://www.korea.kr/news/policyNewsView.do?newsId=148921874), [heraldk.com](https://www.heraldk.com/article/2025102222153330814)). `1393`은 더 이상 쓰이는 독립 번호가 아니다. `RiskKeywordDetector`는 109 + 1577-0199 + 119(긴급신고) 세 개로 이미 수정돼 있고, 이번에 공식 출처로 재확인까지 끝냈다 — 추가 확인 불필요.
 
 ## Git 안전 규칙 (팀 레포라 특히 중요)
 
