@@ -44,6 +44,15 @@ public class SessionService {
         return session;
     }
 
+    /**
+     * 다른 모듈(memory 등)이 세션 엔티티에 의존하지 않고 소유권만 확인할 때 쓴다.
+     * 상태(ACTIVE/FINISHED)는 보지 않는다 — 종료된 세션으로도 기억 미리보기를 만들 수 있어야 함.
+     */
+    @Transactional(readOnly = true)
+    public void verifyOwned(String userId, String sessionId) {
+        findOwned(userId, sessionId);
+    }
+
     private CareSession findOwned(String userId, String sessionId) {
         CareSession session = careSessionRepository.findById(sessionId)
                 .orElseThrow(() -> ApiException.notFound("세션을 찾을 수 없습니다"));

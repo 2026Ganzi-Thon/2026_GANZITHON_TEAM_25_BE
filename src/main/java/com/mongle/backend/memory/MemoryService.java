@@ -5,6 +5,7 @@ import com.mongle.backend.memory.dto.ApproveMemoryResponse;
 import com.mongle.backend.memory.dto.MemoryListResponse;
 import com.mongle.backend.memory.dto.MemoryResponse;
 import com.mongle.backend.memory.dto.PreviewMemoryResponse;
+import com.mongle.backend.session.SessionService;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class MemoryService {
     private final ApprovedMemoryRepository approvedMemoryRepository;
     private final MemoryPreviewRepository memoryPreviewRepository;
     private final MemorySummarizer memorySummarizer;
+    private final SessionService sessionService;
 
     @Value("${mongle.memory.soft-limit}")
     private int softLimit;
@@ -56,6 +58,7 @@ public class MemoryService {
 
     @Transactional
     public PreviewMemoryResponse preview(String userId, String sessionId) {
+        sessionService.verifyOwned(userId, sessionId); // 없으면 404, 남의 세션이면 403 — 타인 대화 요약 유출 방지
         String draft = memorySummarizer.summarize(sessionId);
         MemoryPreview saved = memoryPreviewRepository.save(MemoryPreview.create(userId, sessionId, draft));
         return new PreviewMemoryResponse(saved.getPreviewId(), saved.getDraftSummary());
