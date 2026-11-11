@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -43,6 +44,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, e.getMessage()));
+    }
+
+    /**
+     * 2026-11-11 보안 셀프 감사 중 발견: 깨진 JSON이나 타입이 안 맞는 값(예: "soundEnabled":"yes")은
+     * Bean Validation이 돌기도 전에 역직렬화 단계에서 터져서, 이 핸들러가 없으면 우리 에러 포맷이
+     * 아니라 Spring 기본 에러 응답이 나갔다. `UpdatePreferenceRequest`처럼 전부 nullable Boolean이라
+     * @NotBlank/@Size 같은 걸 붙일 자리가 없는 DTO에서 특히 의미가 크다.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, "요청 본문을 읽을 수 없습니다"));
     }
 
     @ExceptionHandler(Exception.class)

@@ -82,7 +82,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | 소유권 체크(`id + user_id`) | `MemoryService.findOwned`·`SessionService.findOwned`가 `findById` 후 `isOwnedBy()`로 검증(엔티티 메서드로 캡슐화). `PreferenceService`는 애초에 `user_id` 자체가 PK라 교차 접근이 구조적으로 불가능. 전부 테스트로 403/격리 확인됨(`MemoryControllerTest`·`SessionControllerTest`·`PreferenceControllerTest`) |
 | SQLi(파라미터 바인딩) | `@Query` 사용처 1곳(`MemoryPreviewRepository`)뿐이고 named parameter(`:cutoff`) 사용, 문자열 concat 없음. 나머지는 전부 Spring Data 메서드 이름 기반 쿼리라 바인딩 자동 처리 |
 | `.env`/비밀값 미노출 | `git ls-files`·`git log --all --full-history -- .env` 둘 다 빈 결과 — 한 번도 커밋된 적 없음 |
-| 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. **예외 1건 발견**: `UpdatePreferenceRequest`(필드가 전부 `Boolean`이라 보안 위험은 없음, 아래 "아직 안 끝난 것" 참고) |
+| 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. `UpdatePreferenceRequest`는 필드가 전부 `Boolean`이라 애초에 붙일 어노테이션이 없고(보안 위험도 없음), 대신 진짜 문제였던 "타입 안 맞는 JSON이 명세서 포맷이 아닌 응답을 반환하는" 케이스는 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가로 해결(2026-11-11, 테스트로 재확인) |
 | AI 생성 코드 PR 기록 | PR #1~#4는 개인 레포 기준 기록(테스트 결과 포함). **팀 레포로 이관하며 PR 히스토리 자체는 안 넘어옴** — 앞으로 팀 레포에서 만드는 PR부터는 반드시 이 체크리스트를 PR 설명에 남길 것 |
 
 ## 아직 안 끝난 것 (명세서 9장 + 이번 세팅에서 추가로 발견한 것)
@@ -93,7 +93,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 - **배포 환경** — 로컬 데모만 할지, 결선용으로 어딘가에 띄울지 아직 결정 안 됨. `Dockerfile`은 만들어뒀으니 정해지면 바로 올릴 수 있다.
 - **단일 인스턴스 가정** — `SessionContextStore`(대화 컨텍스트, rate limit)가 서버 메모리에만 있다. 여러 대로 스케일 아웃하는 순간 이 클래스부터 Redis 등으로 바꿔야 한다.
 - **`preference` 모듈 테스트 공백** → **완료 (2026-11-11)**: auth/session/memory/reflection엔 통합테스트가 있는데 preference만 없었다. `PreferenceControllerTest` 추가(401, 기본값 자동생성, 부분 업데이트 유지, 유저 간 교차 오염 없음) + `docker compose`로 실제 curl까지 검증.
-- **`UpdatePreferenceRequest`에 Bean Validation 없음** — 이번 감사 중 발견. `soundEnabled` 등이 전부 `Boolean`이라 SQLi·XSS류 보안 위험은 없지만(타입 자체가 true/false만 받음), 잘못된 JSON을 보내면 우리가 정한 에러 포맷(`{"error":"VALIDATION_ERROR",...}`)이 아니라 Spring 기본 에러 응답이 나간다. 보안 이슈는 아니고 일관성 문제라 지금 당장 급하진 않음, 다음에 손댈 때 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가하면 해결됨.
+- ~~`UpdatePreferenceRequest`에 Bean Validation 없음~~ → **완료 (2026-11-11)**: 감사 중 발견했던 건 사실 "타입 안 맞는 JSON이 우리 포맷이 아닌 응답을 반환"하는 문제였다 — Bean Validation이 돌기도 전에 역직렬화 단계(`HttpMessageNotReadableException`)에서 터지는 케이스라 어노테이션으론 못 막는다. `GlobalExceptionHandler`에 핸들러 추가하고 테스트(`타입이_안_맞는_값을_보내면_명세서_포맷의_400을_반환한다`)로 재확인함.
 - ~~안심콜 번호 재확인~~ → **완료 (2026-11-11, 보건복지부 공식 페이지 직접 확인)**: 코드의 `0199`는 `1577-0199`의 뒷자리만 딴 불완전한 번호였다. 보건복지부 공식 페이지([mohw.go.kr](https://www.mohw.go.kr/menu.es?mid=a10706040100))에 "정신건강 위기상담전화(1577-0199) 운영 — 전국 동일번호 1577-0199, 국번 없이 129"라고 직접 명시돼 있음을 확인. 자살예방상담전화 **109**(2024-01-01~ 3자리 통합번호, 기존 1393·129 등을 흡수)도 복수의 정부/언론 출처로 교차 확인(출처: [korea.kr](https://www.korea.kr/news/policyNewsView.do?newsId=148921874), [heraldk.com](https://www.heraldk.com/article/2025102222153330814)). `1393`은 더 이상 쓰이는 독립 번호가 아니다. `RiskKeywordDetector`는 109 + 1577-0199 + 119(긴급신고) 세 개로 이미 수정돼 있고, 이번에 공식 출처로 재확인까지 끝냈다 — 추가 확인 불필요.
 
 ## Git 안전 규칙 (팀 레포라 특히 중요)

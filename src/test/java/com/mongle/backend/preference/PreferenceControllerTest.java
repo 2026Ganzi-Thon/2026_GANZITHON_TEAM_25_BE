@@ -76,4 +76,17 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.soundEnabled").value(true))
                 .andExpect(jsonPath("$.hapticsEnabled").value(true));
     }
+
+    @Test
+    void 타입이_안_맞는_값을_보내면_명세서_포맷의_400을_반환한다() throws Exception {
+        String token = authTestSupport.newUserToken();
+
+        // soundEnabled는 Boolean인데 문자열을 보냄 — Bean Validation 전에 역직렬화 단계에서 터지는 케이스
+        mockMvc.perform(patch("/preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"soundEnabled\": \"yes\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+    }
 }
