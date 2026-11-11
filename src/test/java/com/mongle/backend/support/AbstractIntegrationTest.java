@@ -34,7 +34,12 @@ public abstract class AbstractIntegrationTest {
 
     @DynamicPropertySource
     static void overrideDatasource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
+        // serverTimezone=UTC는 운영 datasource URL(application.yml)에도 있는 설정인데 여기선
+        // 빠져 있었다. 둘 다 JPA/Hibernate로만 쓰고 읽을 땐 내부적으로 자기 자신과만 일관되면
+        // 돼서 드러나지 않았지만, 배치 스케줄러 테스트에서 raw JDBC로 과거 시각을 직접 심어보니
+        // JPA가 읽는 값과 9시간(KST 오프셋)이 벌어지는 게 드러났다(2026-11-11). 운영 설정과 맞춰
+        // 테스트 환경의 타임존 처리를 명확히 고정한다.
+        registry.add("spring.datasource.url", () -> MYSQL.getJdbcUrl() + "?serverTimezone=UTC&characterEncoding=UTF-8");
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
     }

@@ -12,6 +12,10 @@ mongle:
   jwt:
     secret: test-only-secret-key-not-for-production-use-0123456789
     expiration-days: 365
+  auth:
+    anonymous-rate-limit:
+      max-per-window: 30
+      window-minutes: 10
   gemini:
     api-key: ""
     model: gemini-3.5-flash

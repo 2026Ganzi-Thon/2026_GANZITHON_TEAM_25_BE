@@ -70,6 +70,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | 서버 포트 | 8081 | 이 Mac에 Coffeul 등 다른 프로젝트가 로컬 8080을 쓰고 있어서 겹치지 않게 뗐다 |
 | Gemini 타임아웃 "3초 기준" | `8000ms`로 변경 | 2026-11-09 실제 키로 5회 호출해보니 전부 4.7~5.1초 걸림 — 3초면 **매번** 폴백으로 떨어져서 사실상 AI를 안 쓰는 것과 같았다. 실측 기반으로 올림 |
 | 위기 응답 톤 | `SYSTEM_INSTRUCTION`에 "전화번호·기관명 직접 언급 금지" 규칙 추가 | 2026-11-09 실제 키로 위험 키워드 케이스 테스트하다가, Gemini가 자유 텍스트 응답 안에 `riskResources`(0199)와 다른 번호(1393)를 스스로 지어내는 걸 발견함. 정확한 연락처는 구조화된 `riskResources` 필드가 전담하게 하고, 모델 응답은 번호를 아예 언급 못 하게 막음(재검증 3회 완료) |
+| 위험 신호 판정 "키워드 포함 매칭" | **Gemini 문맥 판정이 최종값, 키워드는 Gemini 실패 시 안전망** | 2026-11-11 성준님 피드백: 단순 포함 매칭은 "칼로리"→`칼로`, "그게 맞고 틀리고"→`맞고`처럼 오탐이 구조적으로 난다. 반대로 "조용히 없어지고 싶어" 같은 완곡어는 키워드가 놓친다. 그래서 Gemini를 **같은 호출 안에서** JSON(`reply`+`riskDetected`)으로 받아 문맥 판정을 최종값으로 쓴다(호출 수·지연 증가 없음). Gemini 단독으로 가지 않은 이유: 타임아웃·장애 때 위기 감지가 통째로 꺼지는 건 안전 리그레션이라, 실패 시엔 키워드 판정을 그대로 신뢰한다. 실제 키로 4케이스 검증: "칼로리"→false, "그게 맞고…"→false, "죽고싶…"→true, "조용히 없어지고 싶어"(키워드 미등록)→true |
 | 테스트 DB "Docker 없이 H2" | **Testcontainers로 실제 MySQL 8.4**로 전환 | 2026-11-09, 성준님 합류 전에 CI 자동검증을 강화하기로 함 — H2와 실제 MySQL의 스키마 차이로 이미 한 번 사고(위 CHAR/VARCHAR 건)가 났던 전례가 있어서, 아예 테스트도 운영과 같은 DB로 통일. 로컬·CI 둘 다 Docker가 필요해졌다는 게 트레이드오프 |
 
 ## 보안 체크리스트 셀프 감사 (2026-11-11, 결선 20점 대비)
@@ -83,13 +84,14 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | SQLi(파라미터 바인딩) | `@Query` 사용처 1곳(`MemoryPreviewRepository`)뿐이고 named parameter(`:cutoff`) 사용, 문자열 concat 없음. 나머지는 전부 Spring Data 메서드 이름 기반 쿼리라 바인딩 자동 처리 |
 | `.env`/비밀값 미노출 | `git ls-files`·`git log --all --full-history -- .env` 둘 다 빈 결과 — 한 번도 커밋된 적 없음 |
 | 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. `UpdatePreferenceRequest`는 필드가 전부 `Boolean`이라 애초에 붙일 어노테이션이 없고(보안 위험도 없음), 대신 진짜 문제였던 "타입 안 맞는 JSON이 명세서 포맷이 아닌 응답을 반환하는" 케이스는 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가로 해결(2026-11-11, 테스트로 재확인) |
+| 익명 인증 남용 방어 | `/auth/anonymous`는 로그인이 없어서 매번 다른 UUID를 보내면 `app_user` row가 무제한 생성될 수 있었다(2026-11-11 발견). `AnonymousAuthRateLimiter`가 IP당 10분 30회로 제한(`mongle.auth.anonymous-rate-limit.*`, 초과 시 429 `RATE_LIMITED`). 인메모리라 단일 인스턴스 가정 — 스케일 아웃 시 Redis 등으로 교체 필요 |
 | AI 생성 코드 PR 기록 | PR #1~#4는 개인 레포 기준 기록(테스트 결과 포함). **팀 레포로 이관하며 PR 히스토리 자체는 안 넘어옴** — 앞으로 팀 레포에서 만드는 PR부터는 반드시 이 체크리스트를 PR 설명에 남길 것 |
 
 ## 아직 안 끝난 것 (명세서 9장 + 이번 세팅에서 추가로 발견한 것)
 
 - ~~실 MySQL 검증~~ → **완료 (2026-11-09)**: `docker compose up -d --build backend`로 MySQL 8.4 컨테이너 위에서 Flyway 마이그레이션·Hibernate 스키마 검증·전 엔드포인트(auth→sessions→reflections→memories/preview)를 curl로 직접 확인함. H2가 아니라 실제 MySQL에서도 깨끗하게 돈다.
 - ~~GEMINI_API_KEY 발급~~ → **완료 (2026-11-09)**: 실제 키로 공감대화·위험 케이스·기억 요약 전부 실호출 검증함. 타임아웃을 3초→8초로 올리고, 위기 응답에서 모델이 전화번호를 스스로 지어내던 문제를 프롬프트 규칙으로 막음(위 표 참고).
-- **위험 키워드 리스트** — `application.yml`의 `mongle.risk.keywords`. 16개 초안에서 흔한 동의어·활용형(목매·번개탄·투신·극단적 선택·맞고·쫓아온다·따라온다 등) 8개를 보강해 24개로 늘림(2026-11-09). **보강 과정에서 실제 버그 하나 발견·수정함**: `RiskKeywordDetector`가 입력 텍스트는 공백을 지우고 비교하면서 키워드 쪽은 안 지워서, `"극단적 선택"`처럼 공백 든 키워드가 조용히 매칭 안 되고 있었다(키워드 쪽도 공백 제거하도록 수정, curl로 재검증 완료). 여전히 팀 검수 필요한 초안.
+- **위험 키워드 리스트** — `application.yml`의 `mongle.risk.keywords`. 16개 초안에서 흔한 동의어·활용형(목매·번개탄·투신·극단적 선택·맞고·쫓아온다·따라온다 등) 8개를 보강해 24개로 늘림(2026-11-09). **보강 과정에서 실제 버그 하나 발견·수정함**: `RiskKeywordDetector`가 입력 텍스트는 공백을 지우고 비교하면서 키워드 쪽은 안 지워서, `"극단적 선택"`처럼 공백 든 키워드가 조용히 매칭 안 되고 있었다(키워드 쪽도 공백 제거하도록 수정, curl로 재검증 완료). 여전히 팀 검수 필요한 초안. **2026-11-11 이후 키워드는 최종 판정이 아니라 Gemini 실패 시의 안전망이다**(위 "명세서 대비 변경" 표의 위험 신호 판정 행 참고) — 그래서 검수 우선순위는 낮아졌지만, 오히려 Gemini가 죽었을 때 쓰는 값이라 "놓치지 않는 쪽"으로 계속 넓게 유지한다. `RiskKeywordDetectorTest`가 공백 버그 회귀를 고정함.
 - **배포 환경** — 로컬 데모만 할지, 결선용으로 어딘가에 띄울지 아직 결정 안 됨. `Dockerfile`은 만들어뒀으니 정해지면 바로 올릴 수 있다.
 - **단일 인스턴스 가정** — `SessionContextStore`(대화 컨텍스트, rate limit)가 서버 메모리에만 있다. 여러 대로 스케일 아웃하는 순간 이 클래스부터 Redis 등으로 바꿔야 한다.
 - **`preference` 모듈 테스트 공백** → **완료 (2026-11-11)**: auth/session/memory/reflection엔 통합테스트가 있는데 preference만 없었다. `PreferenceControllerTest` 추가(401, 기본값 자동생성, 부분 업데이트 유지, 유저 간 교차 오염 없음) + `docker compose`로 실제 curl까지 검증.
