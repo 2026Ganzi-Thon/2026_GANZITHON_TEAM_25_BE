@@ -28,6 +28,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {
             "/auth/anonymous",
             "/actuator/health",
+            "/swagger-ui.html", // springdoc의 레거시 진입점 — /swagger-ui/**만 열어두면 이 경로 자체가 401로 막힌다(2026-11-11 실측)
             "/swagger-ui/**",
             "/v3/api-docs/**"
     };

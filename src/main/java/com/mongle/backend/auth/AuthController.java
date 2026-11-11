@@ -2,6 +2,7 @@ package com.mongle.backend.auth;
 
 import com.mongle.backend.auth.dto.AnonymousAuthRequest;
 import com.mongle.backend.auth.dto.AnonymousAuthResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -16,9 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final AnonymousAuthRateLimiter rateLimiter;
 
     @PostMapping("/auth/anonymous")
-    public ResponseEntity<AnonymousAuthResponse> authenticate(@Valid @RequestBody AnonymousAuthRequest request) {
+    public ResponseEntity<AnonymousAuthResponse> authenticate(
+            @Valid @RequestBody AnonymousAuthRequest request, HttpServletRequest httpRequest) {
+        rateLimiter.checkAndIncrement(httpRequest.getRemoteAddr());
         return ResponseEntity.status(HttpStatus.OK).body(authService.authenticate(request.deviceId()));
     }
 }
