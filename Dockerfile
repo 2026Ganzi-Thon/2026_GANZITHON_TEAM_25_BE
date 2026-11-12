@@ -10,6 +10,12 @@ RUN ./mvnw -q -B package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
+# root로 실행하면 앱이 뚫렸을 때 컨테이너 안에서 권한이 너무 크다 — 전용 비root 사용자로 돌린다.
+RUN groupadd --system app && useradd --system --gid app --no-create-home --shell /usr/sbin/nologin app
+COPY --from=build --chown=app:app /app/target/*.jar app.jar
+USER app
 EXPOSE 8081
+# 앱이 뜬 뒤에만 정상으로 본다(Flyway 마이그레이션 포함). /actuator/health는 인증 없이 열려 있다.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=40s --retries=5 \
+  CMD curl -fs http://localhost:8081/actuator/health || exit 1
 ENTRYPOINT ["java", "-jar", "app.jar"]

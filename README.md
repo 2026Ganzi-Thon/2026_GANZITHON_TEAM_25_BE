@@ -86,6 +86,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 | 입력값 검증 | 거의 모든 Request DTO에 `@NotBlank`/`@Size`/`@Pattern` 있음. `UpdatePreferenceRequest`는 필드가 전부 `Boolean`이라 애초에 붙일 어노테이션이 없고(보안 위험도 없음), 대신 진짜 문제였던 "타입 안 맞는 JSON이 명세서 포맷이 아닌 응답을 반환하는" 케이스는 `GlobalExceptionHandler`에 `HttpMessageNotReadableException` 핸들러 추가로 해결(2026-11-11, 테스트로 재확인) |
 | 익명 인증 남용 방어 | `/auth/anonymous`는 로그인이 없어서 매번 다른 UUID를 보내면 `app_user` row가 무제한 생성될 수 있었다(2026-11-11 발견). `AnonymousAuthRateLimiter`가 IP당 10분 30회로 제한(`mongle.auth.anonymous-rate-limit.*`, 초과 시 429 `RATE_LIMITED`). 인메모리라 단일 인스턴스 가정 — 스케일 아웃 시 Redis 등으로 교체 필요 |
 | AI 생성 코드 PR 기록 | PR #1~#4는 개인 레포 기준 기록(테스트 결과 포함). **팀 레포로 이관하며 PR 히스토리 자체는 안 넘어옴** — 앞으로 팀 레포에서 만드는 PR부터는 반드시 이 체크리스트를 PR 설명에 남길 것 |
+| 컨테이너 보안 | **2026-11-12 점검**: 이미지가 `root`(uid 0)로 실행되고 있었고 `.dockerignore`가 없었다. ① 전용 비root 사용자 `app`(uid 999)로 실행하도록 변경 — 컨테이너 안에서 `id`로 확인. ② `HEALTHCHECK`(`/actuator/health`) 추가 — `docker compose ps`가 `healthy`로 표시. ③ `.dockerignore` 추가(`.env`·`.git`·`target`·`docs` 등 제외). 정정: 이전 이미지에도 `.env`는 **들어 있지 않았다**(Dockerfile이 필요한 파일만 `COPY`하고, 이미지 안을 `find`로 확인함) — `.dockerignore`는 지금 사고를 막는 게 아니라 나중에 누가 `COPY . .`로 바꿔도 비밀값이 섞이지 않게 하는 보험이다. `COPY . .`를 하는 임시 Dockerfile로 확인한 빌드 컨텍스트에는 `.env`·`.git`·`target`이 없었다. 실제 기동 후 Gemini 호출까지 확인 |
 
 ## 아직 안 끝난 것 (명세서 9장 + 이번 세팅에서 추가로 발견한 것)
 
