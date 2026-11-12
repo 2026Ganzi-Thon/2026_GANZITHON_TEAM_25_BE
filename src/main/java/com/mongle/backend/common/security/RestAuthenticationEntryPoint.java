@@ -26,7 +26,9 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
             throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        // 인코딩을 안 정하면 getWriter()가 ISO-8859-1로 써서 한글 message가 '?'로 깨진다
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
         response.getWriter().write(objectMapper.writeValueAsString(
                 ErrorResponse.of(ErrorCode.UNAUTHORIZED, "인증 토큰이 없거나 유효하지 않습니다")));
     }

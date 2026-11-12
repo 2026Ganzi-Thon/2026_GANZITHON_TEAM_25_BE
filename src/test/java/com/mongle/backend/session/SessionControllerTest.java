@@ -24,7 +24,12 @@ class SessionControllerTest extends AbstractIntegrationTest {
     void 토큰_없이_세션을_시작하면_401() throws Exception {
         mockMvc.perform(post("/sessions").contentType(MediaType.APPLICATION_JSON).content("{\"entryType\":\"TALK\"}"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("인증 토큰이 없거나 유효하지 않습니다"))
+                // 필터 단계 401은 인코딩을 직접 지정하지 않으면 charset=ISO-8859-1로 나가서 실제 서버에선
+                // 한글이 '?'로 깨진다(2026-11-12 curl로 발견, MockMvc는 본문 왕복이라 값 비교로는 안 잡힘)
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Type", org.hamcrest.Matchers.containsStringIgnoringCase("charset=UTF-8")));
     }
 
     @Test
