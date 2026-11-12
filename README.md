@@ -53,6 +53,7 @@ session/     — POST /sessions, POST /sessions/{id}/finish         } 백엔드 
 memory/      — GET/PATCH/DELETE /memories, preview/approve        } 백엔드 A
 preference/  — GET/PATCH /preferences                             } 백엔드 A
 reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔드 B + 프론트
+weather/     — GET /weather (현실 날씨 반영 배경, 서울 고정)        } 백엔드 B (2026-11-12 프론트 요청)
 ```
 
 `memory`와 `reflection`이 만나는 지점(`POST /memories/preview`가 AI 요약을 쓰는 부분)은 `MemorySummarizer`라는 인터페이스로 끊어놨다 — `memory` 모듈은 이 인터페이스만 알고, `reflection.GeminiMemorySummarizer`가 실제 구현을 준다. 백엔드 A가 memory를 짤 때 B의 Gemini 코드가 끝나있지 않아도 컴파일·테스트가 된다 (이미 그렇게 테스트돼 있음).
@@ -89,6 +90,7 @@ reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔�
 
 ## 아직 안 끝난 것 (명세서 9장 + 이번 세팅에서 추가로 발견한 것)
 
+- **날씨 배경(`GET /weather`, 2026-11-12 프론트 요청)** — 구현·검증 완료, 확인이 남은 것만 적는다. 응답은 디자인 에셋 6장(`NOON·SUNSET·NIGHT·CLOUDY·RAINY·SNOWY`)과 1:1인 `background` + 날씨 `condition`(`CLEAR·CLOUDY·RAIN·SNOW`, 외부 날씨를 전혀 못 얻었을 때만 null). **사용자 위치를 받지 않고 서버 설정의 고정 위치(서울)를 쓴다** — 위치는 민감정보라 저장·로그·전송을 아예 안 하는 쪽으로 시작했고, 배포 후 사용자 위치가 필요해지면 그때 요청 파라미터를 추가한다. 외부 호출은 캐시 주기(10분)당 1회, 실패해도 500 없이 "오래된 값(최대 3시간) → 시각 기반 근사" 순으로 항상 200. 우선순위는 눈/비 > 흐림 > 시간대. 실제 Open-Meteo 호출로 확인(첫 응답 0.94초, 캐시 응답 4ms). **디자인 확인 필요(내 임의값)**: ① 노을 구간(일몰 60분 전~30분 후), ② 천둥=비·안개=흐림·부분 흐림=맑음 매핑, ③ 비/눈이 밤보다 우선(비 오는 밤 배경이 따로 있는지). **제공처 약관**: Open-Meteo 무료 API는 키가 필요 없지만 **비상업 용도 전용**이고(하루 1만 건 미만 한도), 데이터는 CC BY 4.0이라 출처 표기가 필요하다([약관](https://open-meteo.com/en/terms)). 해커톤 시연은 문제없다고 보지만, **배포해서 상업적으로 쓰게 되면 유료 플랜이 필요**하다. 이 기능이 기획 확정안 범위인지는 기획 팀원 확인 전.
 - ~~실 MySQL 검증~~ → **완료 (2026-11-09)**: `docker compose up -d --build backend`로 MySQL 8.4 컨테이너 위에서 Flyway 마이그레이션·Hibernate 스키마 검증·전 엔드포인트(auth→sessions→reflections→memories/preview)를 curl로 직접 확인함. H2가 아니라 실제 MySQL에서도 깨끗하게 돈다.
 - ~~GEMINI_API_KEY 발급~~ → **완료 (2026-11-09)**: 실제 키로 공감대화·위험 케이스·기억 요약 전부 실호출 검증함. 타임아웃을 3초→8초로 올리고, 위기 응답에서 모델이 전화번호를 스스로 지어내던 문제를 프롬프트 규칙으로 막음(위 표 참고).
 - **위험 키워드 리스트** — `application.yml`의 `mongle.risk.keywords`. 16개 초안에서 흔한 동의어·활용형(목매·번개탄·투신·극단적 선택·맞고·쫓아온다·따라온다 등) 8개를 보강해 24개로 늘림(2026-11-09). **보강 과정에서 실제 버그 하나 발견·수정함**: `RiskKeywordDetector`가 입력 텍스트는 공백을 지우고 비교하면서 키워드 쪽은 안 지워서, `"극단적 선택"`처럼 공백 든 키워드가 조용히 매칭 안 되고 있었다(키워드 쪽도 공백 제거하도록 수정, curl로 재검증 완료). 여전히 팀 검수 필요한 초안. **2026-11-11 이후 키워드는 최종 판정이 아니라 Gemini 실패 시의 안전망이다**(위 "명세서 대비 변경" 표의 위험 신호 판정 행 참고) — 그래서 검수 우선순위는 낮아졌지만, 오히려 Gemini가 죽었을 때 쓰는 값이라 "놓치지 않는 쪽"으로 계속 넓게 유지한다. `RiskKeywordDetectorTest`가 공백 버그 회귀를 고정함.

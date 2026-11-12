@@ -45,6 +45,15 @@ mongle:
     timeout-ms: 8000
   reflections:
     max-per-session: 20
+  weather:
+    # 현실 날씨 배경(GET /weather). 위치는 서버 고정(기본 서울) — 사용자 좌표를 받지 않는다.
+    # Open-Meteo 무료 API는 비상업 용도 전용이고 키가 필요 없다(README 참고). 배포 후 상업 목적이면 유료 플랜 필요.
+    base-url: https://api.open-meteo.com/v1
+    latitude: 37.5665
+    longitude: 126.9780
+    timezone: Asia/Seoul
+    timeout-ms: 3000
+    cache-minutes: 10
   risk:
     # 명세서 4.3.1 1차 리스트(초안) — 팀 검수 필요. 쉼표로만 구분, 공백은 trim된다.
     # 2026-11-09: 원래 16개에 흔한 동의어·활용형 8개 보강(목매/번개탄/투신/극단적 선택 — 자살 관련
