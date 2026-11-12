@@ -1,5 +1,10 @@
 server:
   port: 8081 # Coffeul 등 다른 프로젝트가 로컬에서 8080을 쓰는 경우가 많아 겹치지 않게 분리
+  # 리버스 프록시(nginx, 로드밸런서, PaaS 라우터) 뒤에 배포하면 getRemoteAddr()가 프록시 IP로 고정돼서
+  # /auth/anonymous의 IP당 호출 제한(AnonymousAuthRateLimiter)이 전 사용자를 한 덩어리로 세어버린다.
+  # 프록시 뒤일 때만 FORWARD_HEADERS_STRATEGY=framework로 켠다. 프록시 없이 직접 노출된 서버에서 켜면
+  # 클라이언트가 X-Forwarded-For를 위조해 제한을 우회할 수 있어서 기본값은 none.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
 
 spring:
   application:
