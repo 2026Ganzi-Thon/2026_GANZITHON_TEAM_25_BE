@@ -2,8 +2,12 @@ server:
   port: 8081 # Coffeul 등 다른 프로젝트가 로컬에서 8080을 쓰는 경우가 많아 겹치지 않게 분리
   # 리버스 프록시(nginx, 로드밸런서, PaaS 라우터) 뒤에 배포하면 getRemoteAddr()가 프록시 IP로 고정돼서
   # /auth/anonymous의 IP당 호출 제한(AnonymousAuthRateLimiter)이 전 사용자를 한 덩어리로 세어버린다.
-  # 프록시 뒤일 때만 FORWARD_HEADERS_STRATEGY=framework로 켠다. 프록시 없이 직접 노출된 서버에서 켜면
-  # 클라이언트가 X-Forwarded-For를 위조해 제한을 우회할 수 있어서 기본값은 none.
+  # 프록시 뒤일 때만 FORWARD_HEADERS_STRATEGY=native로 켠다(Tomcat RemoteIpValve: X-Forwarded-For를
+  # 오른쪽부터 읽어 신뢰 프록시를 건너뛴다). framework는 맨 왼쪽 값을 써서 nginx 뒤에서도 클라이언트가
+  # 헤더를 위조하면 제한을 우회할 수 있다(PR #8 리뷰에서 지적, 2026-11-12 실제 재현으로 확인).
+  # 프록시 없이 직접 노출된 서버에서는 어떤 값이든 위조가 가능하므로 기본값은 none.
+  # 신뢰 프록시 기본 범위는 사설 IP(10.x·172.16~31.x·192.168.x·127.x 등)다. 프록시가 공인 IP면
+  # server.tomcat.remoteip.internal-proxies로 직접 지정해야 한다.
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
 
 spring:
