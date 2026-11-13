@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Spring Boot 부모 버전이 관리하는 하위 라이브러리는 부모를 올릴 때 같이 따라온다.
+    # 개별 지정한 버전(pom.xml properties의 "OSV 점검" 블록)은 이 PR로 갱신된다.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
