@@ -7,11 +7,27 @@ updates:
     open-pull-requests-limit: 5
     # Spring Boot 부모 버전이 관리하는 하위 라이브러리는 부모를 올릴 때 같이 따라온다.
     # 개별 지정한 버전(pom.xml properties의 "OSV 점검" 블록)은 이 PR로 갱신된다.
+    ignore:
+      # 결선(11/20) 전 메이저 업그레이드 방지 — Boot 4·springdoc 3·Testcontainers 2 등
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # 결선(11/20) 전 메이저 업그레이드 방지 — Boot 4·springdoc 3·Testcontainers 2 등
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # 결선(11/20) 전 메이저 업그레이드 방지 — Boot 4·springdoc 3·Testcontainers 2 등
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 런타임은 LTS인 21로 고정(24는 비LTS·지원 종료). 위 규칙이 빠져도 22 이상 태그는 안 올라오게
+      # 이름을 찍어서 한 번 더 막는다. 21 안의 패치/태그 갱신(21.0.x 등)은 계속 받는다.
+      - dependency-name: "eclipse-temurin"
+        versions: [">= 22"]
