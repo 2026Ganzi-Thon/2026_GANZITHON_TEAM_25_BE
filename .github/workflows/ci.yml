@@ -25,7 +25,7 @@ jobs:
       # (AbstractIntegrationTest가 MySQL 8.4 컨테이너를 띄운다). 별도 services: 블록 불필요.
 
       - name: JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '21'
           distribution: 'temurin'
