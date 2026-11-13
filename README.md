@@ -18,23 +18,25 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 **2. `.env` 채우기.**
 ```bash
 cp .env.example .env
-openssl rand -base64 48   # 이 값을 JWT_SECRET에
+openssl rand -base64 48   # 이 값을 .env의 JWT_SECRET= 뒤에 붙여 넣는다
 ```
 `GEMINI_API_KEY`는 Google AI Studio(aistudio.google.com)에서 발급 — 비워둬도 서버는 뜨고, AI 쪽 엔드포인트는 전부 안전한 폴백 문구로 응답한다(죽지 않는다).
 
 **3. MySQL 띄우고 서버 실행.**
 ```bash
 docker compose up -d mysql     # 호스트 포트 3308
+set -a; source .env; set +a    # .env를 셸 환경변수로 올린다 (아래 설명 참고)
 JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./mvnw spring-boot:run
 # http://localhost:8081/swagger-ui.html 에서 바로 테스트 가능 (Authorize에 /auth/anonymous로 받은 토큰 입력)
 ```
-Docker 없이 전부 컨테이너로 올리고 싶으면 `docker compose up --build`.
+**`.env`는 `docker compose`만 자동으로 읽는다.** `./mvnw spring-boot:run`은 `.env`를 읽지 않으므로 위처럼 `source`로 셸에 올려줘야 하고, 이걸 빼면 `JWT_SECRET 환경변수가 비어 있습니다`로 서버가 뜨지 않는다(2026-11-13 깨끗한 클론에서 문서대로 따라 해보고 확인한 문제). 전부 컨테이너로 올리고 싶으면 이 `source` 없이 `docker compose up --build` 한 줄이면 된다.
 
 **4. 테스트.**
 ```bash
 ./mvnw test   # Docker가 떠 있어야 한다 — Testcontainers가 실제 MySQL 8.4를 자동으로 띄운다.
               # H2는 더 이상 안 쓴다(한 번 스키마 타입 차이로 사고 났었음, 아래 표 참고).
-              # 17개 전부 통과하는 게 기준. 첫 실행은 mysql:8.4 이미지를 받느라 좀 걸릴 수 있다.
+              # 전부 통과(종료 코드 0)하는 게 기준 — 테스트는 계속 늘어나니 개수로 판단하지 않는다.
+              # 첫 실행은 mysql:8.4 이미지를 받느라 좀 걸릴 수 있다.
 ```
 CI(GitHub Actions)도 똑같이 Testcontainers로 돈다 — `ubuntu-latest` 러너엔 Docker가 기본으로 떠 있어서 별도 설정이 필요 없다. 즉 **로컬에서 통과하면 CI에서도 똑같이 통과한다**(둘 다 H2가 아니라 같은 실제 MySQL이라서).
 

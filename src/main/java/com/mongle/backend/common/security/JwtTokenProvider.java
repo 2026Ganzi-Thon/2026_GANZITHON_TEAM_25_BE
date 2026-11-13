@@ -28,7 +28,9 @@ public class JwtTokenProvider {
             @Value("${mongle.jwt.expiration-days}") long expirationDays) {
         if (secret == null || secret.isBlank()) {
             throw new IllegalStateException(
-                    "JWT_SECRET이 비어 있습니다. .env에 32바이트(256비트) 이상의 랜덤 문자열을 채워주세요.");
+                    "JWT_SECRET 환경변수가 비어 있습니다. 32바이트(256비트) 이상의 랜덤 문자열이 필요합니다. "
+                            + ".env는 docker compose만 자동으로 읽으니, ./mvnw spring-boot:run으로 띄울 땐 "
+                            + "'set -a; source .env; set +a'로 셸에 올리거나 JWT_SECRET을 직접 export 하세요(README '로컬 세팅' 3번).");
         }
         try {
             this.signingKey = Keys.hmacShaKeyFor(secret.getBytes());
