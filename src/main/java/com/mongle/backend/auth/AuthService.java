@@ -27,15 +27,18 @@ public class AuthService {
      * 같은 기기에서 거의 동시에 두 번 호출돼도(디바이스 재부팅 직후 앱이 중복 기동하는 경우 등)
      * device_id UNIQUE 제약이 둘 중 하나를 막아주고, 진 쪽은 다시 조회해 승자의 row를 쓴다.
      * 실제 등록 시도는 AppUserRegistrar(REQUIRES_NEW)에 맡긴다 — 이유는 그 클래스 주석 참고.
+     *
+     * 등록 후 다시 읽을 때 일반 findByDeviceId가 아니라 잠금 읽기를 쓰는 이유: MySQL 기본
+     * 격리수준(REPEATABLE READ)에서는 이 트랜잭션의 첫 SELECT 시점 스냅샷으로 계속 읽어서, 그 뒤
+     * 다른 트랜잭션이 커밋한 row가 일반 SELECT로는 안 보인다(진 쪽이 409로 떨어지는 걸
+     * AuthConcurrencyTest로 확인). 잠금 읽기는 최신 커밋 버전을 읽고, 결과가 이 트랜잭션의 영속
+     * 상태가 돼서 이어지는 touch()도 반영된다.
      */
     private AppUser findOrCreate(String deviceId) {
         return appUserRepository.findByDeviceId(deviceId)
                 .orElseGet(() -> {
-                    AppUser created = appUserRegistrar.registerOrNull(deviceId);
-                    if (created != null) {
-                        return created;
-                    }
-                    return appUserRepository.findByDeviceId(deviceId)
+                    appUserRegistrar.registerIfAbsent(deviceId);
+                    return appUserRepository.findByDeviceIdForUpdate(deviceId)
                             .orElseThrow(() -> ApiException.conflict("기기 등록 처리 중 충돌이 발생했습니다. 다시 시도해주세요"));
                 });
     }
