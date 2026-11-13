@@ -48,6 +48,11 @@ curl -X POST http://localhost:8081/auth/anonymous \
 
 기억은 **미리보기 → 사용자가 수정 → 승인** 순서다. 승인하지 않은 요약은 저장되지 않는다.
 
+권장 호출 순서: **대화(reflections) → `POST /memories/preview` → (사용자 수정) → `POST /memories` → `POST /sessions/{id}/finish`**
+
+- preview는 **반드시 finish 전에** 부른다. finish 때 서버의 대화 임시 컨텍스트가 지워져서, finish 후에 preview를 부르면 에러는 안 나지만 요약이 항상 `"오늘의 대화"`로만 나온다.
+- approve는 finish 뒤에 해도 된다. preview 결과는 DB에 따로 저장돼 있어서 preview 후 30분 안이면 세션 종료와 상관없이 승인된다.
+
 ## 4. 공감 대화(reflections)에서 꼭 알아둘 것
 
 ```json
