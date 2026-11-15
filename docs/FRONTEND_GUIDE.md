@@ -15,24 +15,50 @@ docker compose up --build
 | Swagger | `http://localhost:8081/swagger-ui.html` — 우측 상단 Authorize에 토큰 넣고 바로 호출 가능 |
 | CORS | 서버 기본값은 모든 오리진 허용(`ALLOWED_ORIGINS=*`). Vite 개발 서버(`http://localhost:5173`)에서 preflight 통과 확인. 허용 메서드 `GET,POST,PATCH,DELETE,OPTIONS`, 쿠키는 안 쓴다(Bearer 토큰) |
 
-## 2. 인증 — 가입도 로그인도 없다
+## 2. 인증 — 아이디·비밀번호 로그인 (2026-11-15 추가)
 
-1. 앱 최초 실행 때 `deviceId`(UUID v4)를 만들어 **기기에 영구 저장**한다. 같은 `deviceId`는 항상 같은 유저다.
-2. `POST /auth/anonymous` → `accessToken` 받기.
-3. 이후 모든 요청에 `Authorization: Bearer {accessToken}`.
+**로그인이 필수다.** 게스트(익명) 진입은 없고, 소셜 로그인도 없다. 기기를 바꿔도 같은 계정으로 로그인하면 기억·설정이 이어진다.
+
+1. 첫 화면에서 로그인 또는 회원가입을 고른다.
+2. 회원가입: `GET /auth/check-id`로 아이디 중복확인 → `POST /auth/signup`. **가입 응답에는 토큰이 없다.** 가입이 끝나면 첫 화면으로 돌아가 로그인한다.
+3. 로그인: `POST /auth/login` → `accessToken`을 저장한다.
+4. 이후 모든 요청에 `Authorization: Bearer {accessToken}`.
+5. 로그아웃은 서버를 부르지 않고 저장한 토큰을 지우면 된다.
+
+| 호출 | 요청 | 성공 응답 |
+|---|---|---|
+| `GET /auth/check-id?loginId=` | 쿼리 | 200 `{"available": true}` (쓸 수 있으면 `true`) |
+| `POST /auth/signup` | `{name, loginId, password, termsAgreed, privacyAgreed}` | 201 `{"userId": "..."}` |
+| `POST /auth/login` | `{loginId, password}` | 200 `{userId, accessToken, expiresAt, name}` |
 
 ```bash
-curl -X POST http://localhost:8081/auth/anonymous \
-  -H "Content-Type: application/json" -d '{"deviceId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
-# {"userId":"...","accessToken":"...","expiresAt":"2027-11-12T03:12:45Z"}
+curl -X POST http://localhost:8081/auth/signup -H "Content-Type: application/json" \
+  -d '{"name":"김민섭","loginId":"demo2050a1","password":"mongle12!","termsAgreed":true,"privacyAgreed":true}'
+# {"userId":"5d385d84-58df-4b82-bd30-cd61dc4793ae"}
+curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json" \
+  -d '{"loginId":"demo2050a1","password":"mongle12!"}'
+# {"userId":"5d385d84-...","accessToken":"eyJ...","expiresAt":"2027-11-15T08:40:51Z","name":"김민섭"}
 ```
 
-- 토큰 유효기간은 **365일**이다. 토큰을 저장해두고, **401을 받았을 때만** 다시 `/auth/anonymous`를 부른다.
-- **앱을 켤 때마다 `/auth/anonymous`를 부르지 말 것.** 이 엔드포인트는 IP당 10분에 30회로 제한돼 있어서(초과 시 429 `RATE_LIMITED`), 같은 와이파이를 쓰는 기기들이 시연 중에 한꺼번에 켜면 걸릴 수 있다.
-- 앱을 재설치하면 `deviceId`가 바뀌어 이전 데이터와 연결되지 않는다. 의도된 동작이다(익명성).
-- `userId`는 서버가 토큰에서만 꺼낸다. 요청 바디나 파라미터에 `userId`를 실어 보내는 API는 없다.
+**입력 규칙** (서버 기준. 어긋나면 400 `VALIDATION_ERROR`와 문제 `field`)
 
-## 3. 엔드포인트 한눈에 보기 (전부 토큰 필요, `/auth/anonymous` 제외)
+| 필드 | 규칙 |
+|---|---|
+| `name` | 1~20자, 공백만 불가 (앞뒤 공백은 서버가 뗀다) |
+| `loginId` | 6~20자, **영문 소문자+숫자만**, 영문과 숫자를 둘 다 포함. 대문자는 받지 않는다 |
+| `password` | 6~64자, 영문+숫자+특수기호를 모두 포함, **영문·숫자·특수기호만**(한글·공백 불가) |
+| `termsAgreed`, `privacyAgreed` | 둘 다 `true`여야 한다. 아니면 400 (`field`가 `termsAgreed`/`privacyAgreed`) |
+
+- **필드 이름 주의:** 로그인 아이디는 `loginId`다. 응답의 `userId`는 서버 내부 ID(UUID)이고 로그인 아이디가 아니다.
+- **아이디 중복:** 가입 때 이미 있는 아이디면 409 `CONFLICT`(`field: "loginId"`). 중복확인과 가입 사이에 다른 사람이 먼저 가입할 수 있으니 이 409는 화면에서 처리해야 한다.
+- **로그인 실패:** 아이디가 없거나 비밀번호가 틀리면 둘 다 똑같이 401 `UNAUTHORIZED`("아이디 또는 비밀번호가 올바르지 않습니다")다. 어느 쪽이 틀렸는지는 알려주지 않는다.
+- **호출 제한(429 `RATE_LIMITED`)**: 로그인은 접속 IP당 10분에 60회, **같은 아이디로 10번 틀리면 최대 10분간 그 아이디로 로그인할 수 없다(맞는 비밀번호도 막힌다)**. 가입은 IP당 10분 30회, 중복확인은 IP당 10분 120회. 같은 와이파이를 쓰는 기기가 많아도 보통은 문제없다.
+- 토큰 유효기간은 **365일**이다. 토큰을 저장해두고 **401을 받으면 로그인 화면으로 보낸다**.
+- **비밀번호 찾기는 없다.** 이메일을 받지 않아 복구할 방법이 없으니 잃어버리면 새로 가입해야 한다.
+- `userId`는 서버가 토큰에서만 꺼낸다. 요청 바디나 파라미터에 `userId`를 실어 보내는 API는 없다.
+- `POST /auth/anonymous`(기기 익명 인증)는 서버에 남아 있지만 **프론트는 쓰지 않는다.**
+
+## 3. 엔드포인트 한눈에 보기 (`/auth/*`를 뺀 전부 토큰 필요)
 
 | 용도 | 호출 | 성공 | 비고 |
 |---|---|---|---|
@@ -75,17 +101,17 @@ curl -X POST http://localhost:8081/auth/anonymous \
 ## 5. 에러 포맷 (모든 엔드포인트 공통)
 
 ```json
-{ "error": "VALIDATION_ERROR", "message": "deviceId는 UUID v4 형식이어야 합니다", "field": "deviceId" }
+{ "error": "VALIDATION_ERROR", "message": "비밀번호는 영문, 숫자, 특수기호를 모두 포함한 6~64자여야 하며 한글·공백은 쓸 수 없습니다", "field": "password" }
 ```
 
 | HTTP | `error` | 언제 |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | 형식/길이 오류, 깨진 JSON. `field`에 문제 필드(없을 수 있음) |
-| 401 | `UNAUTHORIZED` | 토큰 없음·만료·위조 → **토큰을 다시 받으면 된다** |
+| 401 | `UNAUTHORIZED` | 토큰 없음·만료·위조 → **로그인 화면으로 보낸다**. `/auth/login`의 아이디·비밀번호 오류도 401 |
 | 403 | `FORBIDDEN` | 남의 세션·기억 접근 |
 | 404 | `NOT_FOUND` | 없는 리소스, 만료된 미리보기 |
-| 409 | `CONFLICT` | 끝난 세션에 reflections 요청 |
-| 429 | `RATE_LIMITED` | 세션당 reflections 20회 초과 / 익명 인증 IP당 제한 |
+| 409 | `CONFLICT` | 끝난 세션에 reflections 요청 / 가입 때 이미 있는 아이디(`field: loginId`) |
+| 429 | `RATE_LIMITED` | 세션당 reflections 20회 초과 / 로그인·가입·중복확인 호출 제한 / 같은 아이디로 로그인 10회 실패 |
 | 500 | `INTERNAL_ERROR` | 서버 오류(고정 문구) |
 
 화면 분기에는 `error` 코드를 쓰고, `message`는 보여줘도 되는 한글 문장이다.
@@ -98,8 +124,11 @@ curl -X POST http://localhost:8081/auth/anonymous \
 
 ```bash
 BASE=http://localhost:8081
-TOKEN=$(curl -s -X POST $BASE/auth/anonymous -H "Content-Type: application/json" \
-  -d "{\"deviceId\":\"$(uuidgen)\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
+ID=smoke$(date +%s)   # 영문 소문자+숫자 6~20자
+curl -s -X POST $BASE/auth/signup -H "Content-Type: application/json" \
+  -d "{\"name\":\"테스트\",\"loginId\":\"$ID\",\"password\":\"smoke123!\",\"termsAgreed\":true,\"privacyAgreed\":true}"
+TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
+  -d "{\"loginId\":\"$ID\",\"password\":\"smoke123!\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
 SID=$(curl -s -X POST $BASE/sessions -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"entryType":"TALK"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["sessionId"])')
 curl -s -X POST $BASE/sessions/$SID/reflections -H "Authorization: Bearer $TOKEN" \
@@ -111,5 +140,7 @@ curl -s -X POST $BASE/sessions/$SID/reflections -H "Authorization: Bearer $TOKEN
 ## 8. 아직 정해지지 않은 것
 
 - **배포 URL** — 정해지면 이 문서의 Base URL을 갱신한다.
+- **로그인 응답의 온보딩 완료 여부** — 온보딩이 단순한 "봤는지" 플래그인지 저장할 데이터가 있는지 정해지면 추가한다(지금은 응답에 없다).
+- 약관은 동의한 시각만 저장한다(약관 버전은 저장하지 않는다).
 - 서버 데이터는 **로컬 개발용 DB**다. 배포 전까지는 컨테이너를 지우면(`docker compose down -v`) 데이터가 사라진다.
 - 질문·버그는 백엔드 PR/이슈로 남겨주세요.
