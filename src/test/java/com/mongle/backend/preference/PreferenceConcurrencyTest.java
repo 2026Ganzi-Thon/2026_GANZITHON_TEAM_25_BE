@@ -2,7 +2,9 @@ package com.mongle.backend.preference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.node.IntNode;
 import com.mongle.backend.preference.dto.PreferenceResponse;
+import com.mongle.backend.preference.dto.UpdatePreferenceRequest;
 import com.mongle.backend.support.AbstractIntegrationTest;
 import com.mongle.backend.support.AuthTestSupport;
 import java.util.ArrayList;
@@ -64,6 +66,38 @@ class PreferenceConcurrencyTest extends AbstractIntegrationTest {
             }
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentPatchesToDifferentFieldsPreserveBothChanges() throws Exception {
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            for (int round = 0; round < ROUNDS; round++) {
+                String userId = authTestSupport.newUser().userId();
+                preferenceService.get(userId);
+                CountDownLatch ready = new CountDownLatch(2);
+                CountDownLatch start = new CountDownLatch(1);
+                Future<PreferenceResponse> sound = executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return preferenceService.update(userId, new UpdatePreferenceRequest(null, null, null, "rain", null));
+                });
+                Future<PreferenceResponse> volume = executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return preferenceService.update(
+                            userId, new UpdatePreferenceRequest(null, null, null, null, IntNode.valueOf(80)));
+                });
+                boolean bothReady = ready.await(10, TimeUnit.SECONDS);
+                start.countDown();
+                assertThat(bothReady).isTrue();
+                sound.get(30, TimeUnit.SECONDS);
+                volume.get(30, TimeUnit.SECONDS);
+
+                PreferenceResponse result = preferenceService.get(userId);
+                assertThat(result.natureSound()).isEqualTo("rain");
+                assertThat(result.natureSoundVolume()).isEqualTo(80);
+            }
         }
     }
 }

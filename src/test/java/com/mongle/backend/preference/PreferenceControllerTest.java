@@ -8,10 +8,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.mongle.backend.support.AbstractIntegrationTest;
 import com.mongle.backend.support.AuthTestSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 /** API_명세서_v1 6장 — 지금까지 유일하게 통합테스트가 없던 모듈(성준님 담당 A 영역). */
 @Import(AuthTestSupport.class)
@@ -19,6 +23,7 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private AuthTestSupport authTestSupport;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @Test
     void 토큰_없이_조회하면_401() throws Exception {
@@ -35,7 +40,9 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.soundEnabled").value(true))
                 .andExpect(jsonPath("$.hapticsEnabled").value(true))
-                .andExpect(jsonPath("$.animationEnabled").value(true));
+                .andExpect(jsonPath("$.animationEnabled").value(true))
+                .andExpect(jsonPath("$.natureSound").value("off"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(50));
     }
 
     @Test
@@ -88,5 +95,116 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
                         .content("{\"soundEnabled\": \"yes\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void databaseDefaultsPreserveTheLegacySettings() throws Exception {
+        var user = authTestSupport.newUser();
+        jdbcTemplate.update("""
+                INSERT INTO app_preference (user_id, sound_enabled, haptics_enabled, animation_enabled)
+                VALUES (?, FALSE, TRUE, FALSE)
+                """, user.userId());
+
+        getPreferences(user.accessToken())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.soundEnabled").value(false))
+                .andExpect(jsonPath("$.hapticsEnabled").value(true))
+                .andExpect(jsonPath("$.animationEnabled").value(false))
+                .andExpect(jsonPath("$.natureSound").value("off"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(50));
+    }
+
+    @Test
+    void natureSoundAndVolumePersistIndependentlyOfExistingSettings() throws Exception {
+        String token = authTestSupport.newUserToken();
+
+        patchPreferences(token, """
+                {"natureSound":"rain","natureSoundVolume":100}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.soundEnabled").value(true))
+                .andExpect(jsonPath("$.natureSound").value("rain"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(100));
+
+        patchPreferences(token, """
+                {"soundEnabled":false,"natureSound":null,"natureSoundVolume":0}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("rain"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(0));
+
+        patchPreferences(token, """
+                {"natureSound":"off","natureSoundVolume":null}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("off"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(0));
+
+        patchPreferences(token, """
+                {"animationEnabled":false}
+                """).andExpect(status().isOk());
+
+        getPreferences(token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.soundEnabled").value(false))
+                .andExpect(jsonPath("$.hapticsEnabled").value(true))
+                .andExpect(jsonPath("$.animationEnabled").value(false))
+                .andExpect(jsonPath("$.natureSound").value("off"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(0));
+    }
+
+    @Test
+    void usersHaveSeparateNatureSoundSettings() throws Exception {
+        String firstToken = authTestSupport.newUserToken();
+        String secondToken = authTestSupport.newUserToken();
+
+        patchPreferences(firstToken, """
+                {"natureSound":"insects","natureSoundVolume":80}
+                """).andExpect(status().isOk());
+
+        getPreferences(secondToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("off"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(50));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"RAIN\"", "\"unknown\"", "\"\"", "\"rain \"", "1"})
+    void invalidNatureSoundRejectsTheEntirePatch(String value) throws Exception {
+        assertRejectedPatch("{\"natureSound\":" + value + ",\"natureSoundVolume\":72}", "natureSound");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "101", "50.5", "\"50\"", "true", "2147483648"})
+    void invalidNatureSoundVolumeRejectsTheEntirePatch(String value) throws Exception {
+        assertRejectedPatch("{\"natureSound\":\"waves\",\"natureSoundVolume\":" + value + "}", "natureSoundVolume");
+    }
+
+    private void assertRejectedPatch(String body, String field) throws Exception {
+        String token = authTestSupport.newUserToken();
+        patchPreferences(token, """
+                {"natureSound":"wind","natureSoundVolume":25}
+                """).andExpect(status().isOk());
+
+        patchPreferences(token, body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.field").value(field));
+
+        getPreferences(token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("wind"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(25));
+    }
+
+    private ResultActions getPreferences(String token) throws Exception {
+        return mockMvc.perform(get("/preferences").header("Authorization", "Bearer " + token));
+    }
+
+    private ResultActions patchPreferences(String token, String body) throws Exception {
+        return mockMvc.perform(patch("/preferences")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 }

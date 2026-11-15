@@ -70,7 +70,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 | 기억 승인 | `POST /memories` `{"previewId":"...","finalSummary":"..."}` | 201 `{memoryId, summary, approvedAt}` | 30개를 넘으면 응답에 `"warning":"memory_limit_near"`(저장은 됨, 안내만) |
 | 기억 수정 | `PATCH /memories/{id}` `{"summary":"..."}` | 200 | |
 | 기억 삭제 | `DELETE /memories/{id}` · `DELETE /memories` | 204 | 개별/전체. 하드 삭제 |
-| 환경설정 | `GET /preferences` · `PATCH /preferences` | 200 `{soundEnabled,hapticsEnabled,animationEnabled}` | PATCH는 보낸 필드만 바뀐다. 처음 GET이면 3개 모두 `true`로 만들어 준다 |
+| 환경설정 | `GET /preferences` · `PATCH /preferences` | 200 `{soundEnabled,hapticsEnabled,animationEnabled,natureSound,natureSoundVolume}` | 기존 토글 기본값은 모두 `true`. 자연음 기본값은 `off`, 음량은 `50` |
 
 기억은 **미리보기 → 사용자가 수정 → 승인** 순서다. 승인하지 않은 요약은 저장되지 않는다.
 
@@ -78,6 +78,25 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 
 - preview는 **반드시 finish 전에** 부른다. finish 때 서버의 대화 임시 컨텍스트가 지워져서, finish 후에 preview를 부르면 에러는 안 나지만 요약이 항상 `"오늘의 대화"`로만 나온다.
 - approve는 finish 뒤에 해도 된다. preview 결과는 DB에 따로 저장돼 있어서 preview 후 30분 안이면 세션 종료와 상관없이 승인된다.
+
+### 자연음 설정
+
+로그인 후 `GET /preferences`로 계정의 선택과 음량을 읽어 홈과 ‘나의 몽글이’의 같은 설정에 연결한다.
+
+| 필드 | 허용 값 | 기본값 |
+|---|---|---|
+| `natureSound` | `off`, `wind`, `insects`, `rain`, `waves` | `off` |
+| `natureSoundVolume` | 0~100 JSON 정수 | `50` |
+
+`PATCH /preferences`에 바꿀 필드만 보낸다. 예시 요청은 `{"natureSound":"rain","natureSoundVolume":35}`. 응답은 다음과 같다.
+
+```json
+{"soundEnabled":true,"hapticsEnabled":true,"animationEnabled":true,"natureSound":"rain","natureSoundVolume":35}
+```
+
+- 누락하거나 `null`인 필드는 기존 값을 사용한다. `{"natureSound":"off"}`로 끄면 등록된 음량을 보존한다. 음량 `0`도 저장 가능한 값이다.
+- 허용 목록 밖의 소리나 숫자 문자열·소수·범위 밖 음량은 `400 VALIDATION_ERROR`. 응답 `field`가 있으면 해당 설정의 오류를 표시한다. JSON 본문을 읽을 수 없는 경우에는 `field`가 `null`일 수 있다.
+- 백엔드는 계정별 선택과 음량을 저장한다. 음원 재생·교체·정지와 화면 전환 시 재생 상태 관리는 프론트에서 처리한다.
 
 ## 4. 공감 대화(reflections)에서 꼭 알아둘 것
 

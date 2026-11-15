@@ -2,6 +2,7 @@ package com.mongle.backend.preference;
 
 import com.mongle.backend.common.error.ApiException;
 import com.mongle.backend.preference.dto.PreferenceResponse;
+import com.mongle.backend.preference.dto.UpdatePreferenceRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +20,19 @@ public class PreferenceService {
     }
 
     @Transactional
-    public PreferenceResponse update(String userId, Boolean soundEnabled, Boolean hapticsEnabled, Boolean animationEnabled) {
-        AppPreference preference = findOrCreateDefault(userId);
-        preference.applyPatch(soundEnabled, hapticsEnabled, animationEnabled);
+    public PreferenceResponse update(String userId, UpdatePreferenceRequest request) {
+        Integer natureSoundVolume = request.validatedNatureSoundVolume();
+        // 존재 확인에서 엔티티를 로드하지 않고, 생성이 필요하면 잠금 전에 별도 트랜잭션으로 처리한다.
+        if (!appPreferenceRepository.existsById(userId)) {
+            appPreferenceRegistrar.createDefaultIfAbsent(userId);
+        }
+        AppPreference preference = findForUpdate(userId);
+        preference.applyPatch(
+                request.soundEnabled(),
+                request.hapticsEnabled(),
+                request.animationEnabled(),
+                request.natureSound(),
+                natureSoundVolume);
         return PreferenceResponse.from(preference);
     }
 
@@ -38,8 +49,12 @@ public class PreferenceService {
         return appPreferenceRepository.findById(userId)
                 .orElseGet(() -> {
                     appPreferenceRegistrar.createDefaultIfAbsent(userId);
-                    return appPreferenceRepository.findForUpdate(userId)
-                            .orElseThrow(() -> ApiException.conflict("환경설정 생성 중 충돌이 발생했습니다. 다시 시도해주세요"));
+                    return findForUpdate(userId);
                 });
+    }
+
+    private AppPreference findForUpdate(String userId) {
+        return appPreferenceRepository.findForUpdate(userId)
+                .orElseThrow(() -> ApiException.conflict("환경설정 생성 중 충돌이 발생했습니다. 다시 시도해주세요"));
     }
 }

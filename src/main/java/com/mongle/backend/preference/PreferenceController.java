@@ -3,6 +3,7 @@ package com.mongle.backend.preference;
 import com.mongle.backend.common.security.CurrentUserId;
 import com.mongle.backend.preference.dto.PreferenceResponse;
 import com.mongle.backend.preference.dto.UpdatePreferenceRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,8 +26,7 @@ public class PreferenceController {
     @PatchMapping("/preferences")
     public ResponseEntity<PreferenceResponse> update(
             @CurrentUserId String userId,
-            @RequestBody UpdatePreferenceRequest request) {
-        return ResponseEntity.ok(preferenceService.update(
-                userId, request.soundEnabled(), request.hapticsEnabled(), request.animationEnabled()));
+            @Valid @RequestBody UpdatePreferenceRequest request) {
+        return ResponseEntity.ok(preferenceService.update(userId, request));
     }
 }
