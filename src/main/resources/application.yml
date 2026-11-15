@@ -45,6 +45,14 @@ mongle:
     anonymous-rate-limit:
       max-per-window: 30
       window-minutes: 10
+    # 아이디·비밀번호 가입/로그인 호출 제한(2026-11-15). IP 범위는 같은 와이파이의 여러 기기를 감안해 넉넉하게,
+    # 실패 횟수는 아이디당 10번이면 창이 끝날 때까지 로그인을 막는다(무차별 대입 방어). 값은 임의 기준이라 필요하면 조정.
+    account-rate-limit:
+      signup-ip-per-window: 30
+      check-id-ip-per-window: 120
+      login-ip-per-window: 60
+      login-failure-per-id: 10
+      window-minutes: 10
   gemini:
     api-key: ${GEMINI_API_KEY:}
     model: gemini-3.5-flash
