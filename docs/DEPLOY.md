@@ -60,6 +60,22 @@ docker compose -f deploy/docker-compose.prod.yml --env-file /opt/mongle/.env log
 
 스키마는 첫 기동 때 Flyway가 만든다.
 
+### 4.1 GitHub Actions 자동 배포
+
+`main` push의 CI가 성공하면 CD가 그 커밋으로 EC2를 fast-forward하고 Compose를 다시 빌드한다. 서버에서 컨테이너 준비를 기다린 뒤 GitHub 러너에서 운영 HTTPS 헬스체크를 확인한다. CI를 통과한 커밋보다 원격 `main`이 앞서 있으면 그 배포는 건너뛴다.
+
+저장소의 **Settings → Secrets and variables → Actions**에서 배포용 Secrets를 등록한다.
+
+| Secret 이름 | 등록할 값 |
+|---|---|
+| `DEPLOY_SSH_HOST` | 운영 EC2의 SSH 주소. 호스트명 또는 IPv4만 입력 |
+| `DEPLOY_SSH_KEY` | 입력 없이 인증할 수 있는 자동 배포 전용 SSH 개인키. 공개키는 서버의 `ubuntu` 계정에 등록 |
+| `DEPLOY_SSH_KNOWN_HOSTS` | 서버에서 확인한 SSH 호스트 공개키의 `known_hosts` 한 줄. 호스트 필드는 `DEPLOY_SSH_HOST`와 동일하게 입력 |
+
+- 러너에서 EC2의 SSH에 접근할 수 있어야 한다. 일반 GitHub-hosted 러너의 출발지 IP는 고정돼 있지 않다. 이미 허용된 전용 배포 러너를 사용한다면 Actions의 저장소 변수 `DEPLOY_RUNNER`에 그 러너의 라벨을 입력한다. [GitHub 러너의 IP 주소 안내](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#ip-addresses)
+- 첫 배포 전에 EC2의 `~/2026_GANZITHON_TEAM_25_BE`가 팀 저장소의 깨끗한 `main` 체크아웃이고 `ubuntu` 계정에서 Docker Compose를 실행할 수 있는지 확인한다. 런타임 설정은 서버의 `/opt/mongle/.env`를 사용한다.
+- 초기 설정이 끝나면 **Actions → CD**에서 첫 배포 결과를 확인한다. 최신 커밋 배포가 실패하면 원인을 해결한 뒤 해당 CD 실행을 다시 돌린다.
+
 ## 5. 배포 후 점검
 
 ```bash
