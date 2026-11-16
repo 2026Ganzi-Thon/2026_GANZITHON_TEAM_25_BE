@@ -43,6 +43,9 @@ public class AppPreference implements Persistable<String> {
     @Column(name = "nature_sound_volume", nullable = false)
     private int natureSoundVolume;
 
+    @Column(name = "nature_sound_auto_play_enabled", nullable = false)
+    private boolean natureSoundAutoPlayEnabled;
+
     @Transient
     private boolean isNew = false;
 
@@ -54,6 +57,7 @@ public class AppPreference implements Persistable<String> {
         preference.animationEnabled = true;
         preference.natureSound = "off";
         preference.natureSoundVolume = 50;
+        preference.natureSoundAutoPlayEnabled = false;
         preference.isNew = true;
         return preference;
     }
@@ -63,12 +67,14 @@ public class AppPreference implements Persistable<String> {
             Boolean hapticsEnabled,
             Boolean animationEnabled,
             String natureSound,
-            Integer natureSoundVolume) {
+            Integer natureSoundVolume,
+            Boolean natureSoundAutoPlayEnabled) {
         if (soundEnabled != null) this.soundEnabled = soundEnabled;
         if (hapticsEnabled != null) this.hapticsEnabled = hapticsEnabled;
         if (animationEnabled != null) this.animationEnabled = animationEnabled;
         if (natureSound != null) this.natureSound = natureSound;
         if (natureSoundVolume != null) this.natureSoundVolume = natureSoundVolume;
+        if (natureSoundAutoPlayEnabled != null) this.natureSoundAutoPlayEnabled = natureSoundAutoPlayEnabled;
     }
 
     @Override

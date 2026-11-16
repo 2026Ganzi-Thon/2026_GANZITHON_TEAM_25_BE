@@ -22,6 +22,7 @@ public class PreferenceService {
     @Transactional
     public PreferenceResponse update(String userId, UpdatePreferenceRequest request) {
         Integer natureSoundVolume = request.validatedNatureSoundVolume();
+        Boolean natureSoundAutoPlayEnabled = request.validatedNatureSoundAutoPlayEnabled();
         // 존재 확인에서 엔티티를 로드하지 않고, 생성이 필요하면 잠금 전에 별도 트랜잭션으로 처리한다.
         if (!appPreferenceRepository.existsById(userId)) {
             appPreferenceRegistrar.createDefaultIfAbsent(userId);
@@ -32,7 +33,8 @@ public class PreferenceService {
                 request.hapticsEnabled(),
                 request.animationEnabled(),
                 request.natureSound(),
-                natureSoundVolume);
+                natureSoundVolume,
+                natureSoundAutoPlayEnabled);
         return PreferenceResponse.from(preference);
     }
 

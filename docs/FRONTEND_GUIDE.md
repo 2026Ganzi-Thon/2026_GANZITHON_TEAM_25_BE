@@ -70,7 +70,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 | 기억 승인 | `POST /memories` `{"previewId":"...","finalSummary":"..."}` | 201 `{memoryId, summary, approvedAt}` | 30개를 넘으면 응답에 `"warning":"memory_limit_near"`(저장은 됨, 안내만) |
 | 기억 수정 | `PATCH /memories/{id}` `{"summary":"..."}` | 200 | |
 | 기억 삭제 | `DELETE /memories/{id}` · `DELETE /memories` | 204 | 개별/전체. 하드 삭제 |
-| 환경설정 | `GET /preferences` · `PATCH /preferences` | 200 `{soundEnabled,hapticsEnabled,animationEnabled,natureSound,natureSoundVolume}` | 기존 토글 기본값은 모두 `true`. 자연음 기본값은 `off`, 음량은 `50` |
+| 환경설정 | `GET /preferences` · `PATCH /preferences` | 200 `{soundEnabled,hapticsEnabled,animationEnabled,natureSound,natureSoundVolume,natureSoundAutoPlayEnabled}` | 기존 토글 기본값은 모두 `true`. 자연음 기본값은 `off`, 음량은 `50`, 자동 재생은 `false` |
 
 기억은 **미리보기 → 사용자가 수정 → 승인** 순서다. 승인하지 않은 요약은 저장되지 않는다.
 
@@ -87,15 +87,17 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 |---|---|---|
 | `natureSound` | `off`, `wind`, `insects`, `rain`, `waves` | `off` |
 | `natureSoundVolume` | 0~100 JSON 정수 | `50` |
+| `natureSoundAutoPlayEnabled` | JSON 불리언 `true` / `false` | `false` |
 
 `PATCH /preferences`에 바꿀 필드만 보낸다. 예시 요청은 `{"natureSound":"rain","natureSoundVolume":35}`. 응답은 다음과 같다.
 
 ```json
-{"soundEnabled":true,"hapticsEnabled":true,"animationEnabled":true,"natureSound":"rain","natureSoundVolume":35}
+{"soundEnabled":true,"hapticsEnabled":true,"animationEnabled":true,"natureSound":"rain","natureSoundVolume":35,"natureSoundAutoPlayEnabled":false}
 ```
 
 - 누락하거나 `null`인 필드는 기존 값을 사용한다. `{"natureSound":"off"}`로 끄면 등록된 음량을 보존한다. 음량 `0`도 저장 가능한 값이다.
 - 허용 목록 밖의 소리나 숫자 문자열·소수·범위 밖 음량은 `400 VALIDATION_ERROR`. 응답 `field`가 있으면 해당 설정의 오류를 표시한다. JSON 본문을 읽을 수 없는 경우에는 `field`가 `null`일 수 있다.
+- 앱 시작 시 자동 재생은 사용자가 켰고 `natureSound`가 `off` 이외일 때 프론트에서 처리한다. `{"natureSoundAutoPlayEnabled":false}`로 자동 재생을 꺼도 선택과 음량은 보존된다. 불리언 형식 오류는 `400 VALIDATION_ERROR`와 `field: "natureSoundAutoPlayEnabled"`를 반환한다.
 - 백엔드는 계정별 선택과 음량을 저장한다. 음원 재생·교체·정지와 화면 전환 시 재생 상태 관리는 프론트에서 처리한다.
 
 ## 4. 공감 대화(reflections)에서 꼭 알아둘 것
