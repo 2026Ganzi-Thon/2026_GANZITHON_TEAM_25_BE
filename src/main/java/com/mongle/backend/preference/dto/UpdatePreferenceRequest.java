@@ -13,7 +13,9 @@ public record UpdatePreferenceRequest(
         @Pattern(regexp = "off|wind|insects|rain|waves", message = "지원하지 않는 자연음입니다")
         String natureSound,
         @Schema(type = "integer", minimum = "0", maximum = "100", example = "50")
-        JsonNode natureSoundVolume) {
+        JsonNode natureSoundVolume,
+        @Schema(type = "boolean", example = "false")
+        JsonNode natureSoundAutoPlayEnabled) {
 
     public Integer validatedNatureSoundVolume() {
         if (natureSoundVolume == null || natureSoundVolume.isNull()) {
@@ -25,5 +27,15 @@ public record UpdatePreferenceRequest(
             throw ApiException.validation("자연음 음량은 0~100 사이의 정수여야 합니다", "natureSoundVolume");
         }
         return natureSoundVolume.intValue();
+    }
+
+    public Boolean validatedNatureSoundAutoPlayEnabled() {
+        if (natureSoundAutoPlayEnabled == null || natureSoundAutoPlayEnabled.isNull()) {
+            return null;
+        }
+        if (!natureSoundAutoPlayEnabled.isBoolean()) {
+            throw ApiException.validation("자연음 자동 재생은 true 또는 false여야 합니다", "natureSoundAutoPlayEnabled");
+        }
+        return natureSoundAutoPlayEnabled.booleanValue();
     }
 }

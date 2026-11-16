@@ -7,7 +7,8 @@ public record PreferenceResponse(
         boolean hapticsEnabled,
         boolean animationEnabled,
         String natureSound,
-        int natureSoundVolume) {
+        int natureSoundVolume,
+        boolean natureSoundAutoPlayEnabled) {
 
     public static PreferenceResponse from(AppPreference preference) {
         return new PreferenceResponse(
@@ -15,6 +16,7 @@ public record PreferenceResponse(
                 preference.isHapticsEnabled(),
                 preference.isAnimationEnabled(),
                 preference.getNatureSound(),
-                preference.getNatureSoundVolume());
+                preference.getNatureSoundVolume(),
+                preference.isNatureSoundAutoPlayEnabled());
     }
 }

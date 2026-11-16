@@ -42,7 +42,8 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.hapticsEnabled").value(true))
                 .andExpect(jsonPath("$.animationEnabled").value(true))
                 .andExpect(jsonPath("$.natureSound").value("off"))
-                .andExpect(jsonPath("$.natureSoundVolume").value(50));
+                .andExpect(jsonPath("$.natureSoundVolume").value(50))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
     }
 
     @Test
@@ -111,7 +112,8 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.hapticsEnabled").value(true))
                 .andExpect(jsonPath("$.animationEnabled").value(false))
                 .andExpect(jsonPath("$.natureSound").value("off"))
-                .andExpect(jsonPath("$.natureSoundVolume").value(50));
+                .andExpect(jsonPath("$.natureSoundVolume").value(50))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
     }
 
     @Test
@@ -159,13 +161,59 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
         String secondToken = authTestSupport.newUserToken();
 
         patchPreferences(firstToken, """
-                {"natureSound":"insects","natureSoundVolume":80}
+                {"natureSound":"insects","natureSoundVolume":80,"natureSoundAutoPlayEnabled":true}
                 """).andExpect(status().isOk());
 
         getPreferences(secondToken)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.natureSound").value("off"))
-                .andExpect(jsonPath("$.natureSoundVolume").value(50));
+                .andExpect(jsonPath("$.natureSoundVolume").value(50))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
+    }
+
+    @Test
+    void autoPlayPreservesTheSavedSoundAndVolume() throws Exception {
+        String token = authTestSupport.newUserToken();
+
+        patchPreferences(token, """
+                {"natureSound":"rain","natureSoundVolume":35}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
+
+        patchPreferences(token, """
+                {"natureSoundAutoPlayEnabled":true}
+                """).andExpect(status().isOk());
+        patchPreferences(token, """
+                {"natureSoundAutoPlayEnabled":null,"natureSoundVolume":45}
+                """).andExpect(status().isOk());
+        patchPreferences(token, """
+                {"hapticsEnabled":false}
+                """).andExpect(status().isOk());
+
+        getPreferences(token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("rain"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(45))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(true));
+
+        patchPreferences(token, """
+                {"natureSoundAutoPlayEnabled":false}
+                """).andExpect(status().isOk());
+
+        getPreferences(token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.natureSound").value("rain"))
+                .andExpect(jsonPath("$.natureSoundVolume").value(45))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "\"true\"", "[]"})
+    void nonBooleanAutoPlayRejectsTheEntirePatch(String value) throws Exception {
+        assertRejectedPatch(
+                "{\"natureSound\":\"waves\",\"natureSoundAutoPlayEnabled\":" + value + "}",
+                "natureSoundAutoPlayEnabled");
     }
 
     @ParameterizedTest
@@ -194,7 +242,8 @@ class PreferenceControllerTest extends AbstractIntegrationTest {
         getPreferences(token)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.natureSound").value("wind"))
-                .andExpect(jsonPath("$.natureSoundVolume").value(25));
+                .andExpect(jsonPath("$.natureSoundVolume").value(25))
+                .andExpect(jsonPath("$.natureSoundAutoPlayEnabled").value(false));
     }
 
     private ResultActions getPreferences(String token) throws Exception {

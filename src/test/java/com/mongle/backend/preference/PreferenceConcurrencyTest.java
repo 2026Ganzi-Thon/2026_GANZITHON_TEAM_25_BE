@@ -80,13 +80,14 @@ class PreferenceConcurrencyTest extends AbstractIntegrationTest {
                 Future<PreferenceResponse> sound = executor.submit(() -> {
                     ready.countDown();
                     start.await();
-                    return preferenceService.update(userId, new UpdatePreferenceRequest(null, null, null, "rain", null));
+                    return preferenceService.update(
+                            userId, new UpdatePreferenceRequest(null, null, null, "rain", null, null));
                 });
                 Future<PreferenceResponse> volume = executor.submit(() -> {
                     ready.countDown();
                     start.await();
                     return preferenceService.update(
-                            userId, new UpdatePreferenceRequest(null, null, null, null, IntNode.valueOf(80)));
+                            userId, new UpdatePreferenceRequest(null, null, null, null, IntNode.valueOf(80), null));
                 });
                 boolean bothReady = ready.await(10, TimeUnit.SECONDS);
                 start.countDown();
