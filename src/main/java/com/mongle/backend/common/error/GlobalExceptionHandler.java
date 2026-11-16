@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String INVALID_REQUEST_MESSAGE = "요청 형식이 올바르지 않습니다";
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApiException(ApiException e) {
         if (e.getErrorCode() == ErrorCode.AI_UPSTREAM_ERROR) {
@@ -35,15 +37,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
         var fieldError = e.getBindingResult().getFieldErrors().stream().findFirst();
         String field = fieldError.map(f -> f.getField()).orElse(null);
-        String message = fieldError.map(f -> f.getDefaultMessage()).orElse("요청 형식이 올바르지 않습니다");
+        String message = fieldError.map(f -> f.getDefaultMessage()).orElse(INVALID_REQUEST_MESSAGE);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, message, field));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+    public ResponseEntity<ErrorResponse> handleConstraintViolation() {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, e.getMessage()));
+                .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, INVALID_REQUEST_MESSAGE));
     }
 
     /**
