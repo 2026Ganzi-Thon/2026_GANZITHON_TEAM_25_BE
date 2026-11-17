@@ -66,6 +66,18 @@ class RiskKeywordDetectorTest {
     }
 
     @Test
+    void 피해_문장은_운영_안전_문구에_가려지지_않는다() {
+        // application.yml의 safe-phrases와 같은 값. "다 맞았"을 안전 문구로 넣었다가 "아빠한테 다 맞았어"가
+        // 안전으로 판정되던 결함(PR #40 리뷰)의 회귀 방지 — 시험 문장의 오탐 한 건보다 위기를 놓치는 쪽이 비싸다.
+        RiskKeywordDetector detector = new RiskKeywordDetector(
+                List.of("맞았", "맞고"),
+                List.of("칼로리", "그게 맞고", "맞고 틀리고", "답 맞았", "정답 맞았", "문제 맞았", "퀴즈 맞았"));
+
+        assertThat(detector.matches("아빠한테 다 맞았어")).isTrue();
+        assertThat(detector.matches("엄마한테 대답 안 했다고 맞았어")).isTrue();
+    }
+
+    @Test
     void safe_phrases_설정이_없어도_정상_동작한다() {
         RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"), List.of());
 
