@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.context.event.EventListener;
@@ -26,12 +27,22 @@ public class SessionContextStore {
     private final Map<String, Deque<Turn>> turnsBySession = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> reflectionCountBySession = new ConcurrentHashMap<>();
 
+    // reflect()는 Gemini 호출(네트워크, 수 초) 동안 세션이 살아있는지 딱 한 번만 확인하고
+    // 끝난 뒤 appendTurn을 부른다. 그 사이 다른 요청이 finish()를 부르면 턴이 비워지는데,
+    // 늦게 돌아온 appendTurn이 그걸 되살리는 레이스가 있었다(2026-11-17 FE 연동 검수 발견).
+    // 한 번 finish된 세션 ID는 영구히 기억해 늦은 응답을 전부 무시한다 — appendTurn과
+    // onSessionFinished를 같은 락으로 묶어 "확인 후 끼어들기" 틈도 없앤다.
+    private final Set<String> finishedSessions = ConcurrentHashMap.newKeySet();
+
     public List<Turn> recentTurns(String sessionId) {
         Deque<Turn> turns = turnsBySession.get(sessionId);
         return turns == null ? List.of() : List.copyOf(turns);
     }
 
     public synchronized void appendTurn(String sessionId, Turn turn) {
+        if (finishedSessions.contains(sessionId)) {
+            return;
+        }
         Deque<Turn> turns = turnsBySession.computeIfAbsent(sessionId, id -> new ArrayDeque<>());
         turns.addLast(turn);
         while (turns.size() > MAX_TURNS_KEPT) {
@@ -45,7 +56,8 @@ public class SessionContextStore {
     }
 
     @EventListener
-    public void onSessionFinished(SessionFinishedEvent event) {
+    public synchronized void onSessionFinished(SessionFinishedEvent event) {
+        finishedSessions.add(event.sessionId());
         turnsBySession.remove(event.sessionId());
         reflectionCountBySession.remove(event.sessionId());
     }
