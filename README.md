@@ -54,6 +54,7 @@ auth/        — POST /auth/anonymous                              } 백엔드 A
 session/     — POST /sessions, POST /sessions/{id}/finish         } 백엔드 A
 memory/      — GET/PATCH/DELETE /memories, preview/approve        } 백엔드 A
 preference/  — GET/PATCH /preferences                             } 백엔드 A
+profile/     — GET/PATCH /mongle-profile (온보딩 선택 저장)          } 백엔드 B (2026-11-18, 로그인 응답 쪽 onboardingCompleted는 A)
 reflection/  — POST /sessions/{id}/reflections, Gemini 연동        } 백엔드 B + 프론트
 ```
 

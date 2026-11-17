@@ -71,6 +71,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 | 기억 수정 | `PATCH /memories/{id}` `{"summary":"..."}` | 200 | |
 | 기억 삭제 | `DELETE /memories/{id}` · `DELETE /memories` | 204 | 개별/전체. 하드 삭제 |
 | 환경설정 | `GET /preferences` · `PATCH /preferences` | 200 `{soundEnabled,hapticsEnabled,animationEnabled,natureSound,natureSoundVolume,natureSoundAutoPlayEnabled}` | 기존 토글 기본값은 모두 `true`. 자연음 기본값은 `off`, 음량은 `50`, 자동 재생은 `false` |
+| 몽글 프로필(온보딩) | `GET /mongle-profile` · `PATCH /mongle-profile` | 200 `{similarityTrait,comfortStyle,accessory,onboardingCompleted}` | 처음 조회하면 전부 `null`, `onboardingCompleted:false`. 아래 참고 |
 
 기억은 **미리보기 → 사용자가 수정 → 승인** 순서다. 승인하지 않은 요약은 저장되지 않는다.
 
@@ -99,6 +100,21 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 - 허용 목록 밖의 소리나 숫자 문자열·소수·범위 밖 음량은 `400 VALIDATION_ERROR`. 응답 `field`가 있으면 해당 설정의 오류를 표시한다. JSON 본문을 읽을 수 없는 경우에는 `field`가 `null`일 수 있다.
 - 앱 시작 시 자동 재생은 사용자가 켰고 `natureSound`가 `off` 이외일 때 프론트에서 처리한다. `{"natureSoundAutoPlayEnabled":false}`로 자동 재생을 꺼도 선택과 음량은 보존된다. 불리언 형식 오류는 `400 VALIDATION_ERROR`와 `field: "natureSoundAutoPlayEnabled"`를 반환한다.
 - 백엔드는 계정별 선택과 음량을 저장한다. 음원 재생·교체·정지와 화면 전환 시 재생 상태 관리는 프론트에서 처리한다.
+
+### 몽글 프로필(온보딩)
+
+로그인 후 `GET /mongle-profile`로 온보딩 완료 여부와 저장된 선택을 읽는다. 세 필드 전부 선택이고, 넘기지 않거나 `null`이면 기존 값을 유지한다(다른 PATCH 엔드포인트와 동일).
+
+| 필드 | 허용 값 | 비고 |
+|---|---|---|
+| `similarityTrait` | `멍하니 있기`, `잘 웃기`, `침 뱉기` | 건너뛰면 계속 `null` |
+| `comfortStyle` | `차분하고 조용함`, `부드럽고 다정함`, `가끔 장난스러움` | 건너뛰면 계속 `null` |
+| `accessory` | `없음`, `리본(머리)`, `작은 꽃(머리)`, `모자`, `리본(목)`, `방울(목)` | **"없음"도 실제 값으로 저장된다** — `null`을 보내면 "변경 없음"으로 처리돼 장식을 뺄 수 없다. 장식을 없애려면 `{"accessory":"없음"}`을 명시적으로 보낼 것 |
+
+- `onboardingCompleted`는 저장된 플래그가 아니라 **`accessory`가 `null`이 아니면 `true`**로 계산된 값이다. 닮은 특징·편안한 성향은 건너뛰어도 완료 여부에 영향이 없다.
+- **장식 단계를 건너뛰거나 중간에 나가면 `accessory`가 `null`로 남아 온보딩이 계속 미완료가 된다.** 그래서 둘 중 하나로 FE와 합의해야 한다(2026-11-18 성준님 지적): ① 장식 단계의 "건너뛰기"를 눌러도 `{"accessory":"없음"}`을 보낸다 ② 장식을 온보딩의 마지막 필수 단계로 둔다. 서버는 어느 쪽이든 `"없음"`을 명시 값으로 받는다. 영어 `"none"` 같은 값은 허용 목록 밖이라 `400 VALIDATION_ERROR`다.
+- 허용 목록 밖의 값은 `400 VALIDATION_ERROR`, `field`에 해당 필드명.
+- 앱 재시작 때 토큰을 재사용해 로그인 API를 다시 안 부르는 경우를 위해, `onboardingCompleted`는 로그인·회원가입 응답에도 같은 규칙으로 들어간다(성준님 작업).
 
 ## 4. 공감 대화(reflections)에서 꼭 알아둘 것
 
@@ -161,7 +177,6 @@ curl -s -X POST $BASE/sessions/$SID/reflections -H "Authorization: Bearer $TOKEN
 ## 8. 아직 정해지지 않은 것
 
 - **배포 URL** — 정해지면 이 문서의 Base URL을 갱신한다.
-- **로그인 응답의 온보딩 완료 여부** — 온보딩이 단순한 "봤는지" 플래그인지 저장할 데이터가 있는지 정해지면 추가한다(지금은 응답에 없다).
 - 약관은 동의한 시각만 저장한다(약관 버전은 저장하지 않는다).
 - 서버 데이터는 **로컬 개발용 DB**다. 배포 전까지는 컨테이너를 지우면(`docker compose down -v`) 데이터가 사라진다.
 - 질문·버그는 백엔드 PR/이슈로 남겨주세요.
