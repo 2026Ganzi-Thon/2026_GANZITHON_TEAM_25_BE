@@ -36,7 +36,7 @@ class ReflectionServiceFinishedSessionTest {
                 mock(SessionService.class),
                 mock(ApprovedMemoryRepository.class),
                 contextStore,
-                new RiskKeywordDetector(List.of()),
+                new RiskKeywordDetector(List.of(), List.of()),
                 geminiClient);
         ReflectionTestUtils.setField(service, "maxPerSession", 20);
 
@@ -58,7 +58,7 @@ class ReflectionServiceFinishedSessionTest {
                 mock(SessionService.class),
                 mock(ApprovedMemoryRepository.class),
                 contextStore,
-                new RiskKeywordDetector(List.of()),
+                new RiskKeywordDetector(List.of(), List.of()),
                 geminiClient);
         ReflectionTestUtils.setField(service, "maxPerSession", 20);
 

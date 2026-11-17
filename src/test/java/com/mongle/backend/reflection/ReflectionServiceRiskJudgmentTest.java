@@ -33,7 +33,7 @@ class ReflectionServiceRiskJudgmentTest {
                 mock(SessionService.class),
                 mock(ApprovedMemoryRepository.class),
                 new SessionContextStore(),
-                new RiskKeywordDetector(List.of("칼로", "맞고", "죽고싶")),
+                new RiskKeywordDetector(List.of("칼로", "맞고", "죽고싶"), List.of()),
                 geminiClient);
         ReflectionTestUtils.setField(service, "maxPerSession", 20);
     }
