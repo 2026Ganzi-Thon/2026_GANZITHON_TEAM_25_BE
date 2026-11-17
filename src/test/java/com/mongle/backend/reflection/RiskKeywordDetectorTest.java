@@ -14,14 +14,14 @@ class RiskKeywordDetectorTest {
 
     @Test
     void 키워드에_공백이_있어도_정규화돼서_매칭된다() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("극단적 선택"));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("극단적 선택"), List.of());
 
         assertThat(detector.matches("요즘 극단적선택을 생각해")).isTrue();
     }
 
     @Test
     void 빈_문자열이나_공백만_있는_키워드는_무시된다() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살", "", "   "));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살", "", "   "), List.of());
 
         assertThat(detector.matches("   ")).isFalse();
         assertThat(detector.matches("자살하고 싶어")).isTrue();
@@ -29,28 +29,52 @@ class RiskKeywordDetectorTest {
 
     @Test
     void 키워드가_문장_중간에_있어도_부분_포함으로_감지된다() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("죽고싶"));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("죽고싶"), List.of());
 
         assertThat(detector.matches("나 요즘 너무 힘들어서 죽고싶다는 생각이 들어")).isTrue();
     }
 
     @Test
     void 매칭되는_키워드가_없으면_false() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살", "극단적 선택"));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살", "극단적 선택"), List.of());
 
         assertThat(detector.matches("오늘 날씨 좋고 기분이 괜찮아")).isFalse();
     }
 
     @Test
     void 빈_입력_텍스트는_매칭되지_않는다() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"), List.of());
 
         assertThat(detector.matches("")).isFalse();
     }
 
     @Test
+    void 안전_문구가_키워드를_감싸면_매칭되지_않는다() {
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("칼로", "맞고", "맞았"), List.of("칼로리", "맞고 틀리고", "답 맞았"));
+
+        assertThat(detector.matches("오늘 칼로리 너무 높게 먹었어")).isFalse();
+        assertThat(detector.matches("그게 맞고 틀리고가 중요해?")).isFalse();
+        assertThat(detector.matches("시험에서 답 맞았어 기분 좋다")).isFalse();
+    }
+
+    @Test
+    void 안전_문구가_없는_진짜_신호는_그대로_매칭된다() {
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("칼로", "맞고"), List.of("칼로리", "맞고 틀리고"));
+
+        assertThat(detector.matches("칼로 사람을 찔렀어")).isTrue();
+        assertThat(detector.matches("남자친구한테 계속 맞고 있어")).isTrue();
+    }
+
+    @Test
+    void safe_phrases_설정이_없어도_정상_동작한다() {
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"), List.of());
+
+        assertThat(detector.matches("요즘 자살 생각이 자꾸 들어")).isTrue();
+    }
+
+    @Test
     void resources는_항상_안심콜_3종을_반환한다() {
-        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"));
+        RiskKeywordDetector detector = new RiskKeywordDetector(List.of("자살"), List.of());
 
         assertThat(detector.resources()).hasSize(3);
         assertThat(detector.resources())

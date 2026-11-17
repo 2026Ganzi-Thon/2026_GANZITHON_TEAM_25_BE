@@ -23,13 +23,20 @@ public class RiskKeywordDetector {
     );
 
     private final List<String> keywords;
+    private final List<String> safePhrases;
 
     public RiskKeywordDetector(
-            @Value("#{'${mongle.risk.keywords}'.split(',')}") List<String> keywords) {
+            @Value("#{'${mongle.risk.keywords}'.split(',')}") List<String> keywords,
+            @Value("#{'${mongle.risk.safe-phrases:}'.split(',')}") List<String> safePhrases) {
         // matches()가 입력 텍스트의 공백을 전부 제거하고 비교하므로, "극단적 선택"처럼 공백이
         // 든 키워드를 yml에 그대로 적으면 조용히 매칭이 안 된다(2026-11-09 실제 curl 검증 중
         // 발견). 키워드 쪽도 똑같이 공백을 제거해서 이 클래스 안에서 규칙이 항상 일관되게 한다.
-        this.keywords = keywords.stream()
+        this.keywords = normalize(keywords);
+        this.safePhrases = normalize(safePhrases);
+    }
+
+    private static List<String> normalize(List<String> raw) {
+        return raw.stream()
                 .map(k -> k.trim().replaceAll("\\s+", ""))
                 .filter(k -> !k.isBlank())
                 .toList();
@@ -37,7 +44,15 @@ public class RiskKeywordDetector {
 
     public boolean matches(String text) {
         String normalized = text.replaceAll("\\s+", "");
-        return keywords.stream().anyMatch(normalized::contains);
+        // 2026-11-17: "칼로리"/"그게 맞고 틀리고"처럼 알려진 안전 문구를 먼저 지우고 남은
+        // 텍스트에서만 키워드를 찾는다 — "칼로 사람을 찔렀어"처럼 안전 문구가 없는 진짜 신호는
+        // 그대로 걸린다. Gemini가 응답하면 이 안전망 자체를 안 타므로 오탐 영향은 폴백 때만 있다.
+        String withSafePhrasesRemoved = normalized;
+        for (String safePhrase : safePhrases) {
+            withSafePhrasesRemoved = withSafePhrasesRemoved.replace(safePhrase, "");
+        }
+        String target = withSafePhrasesRemoved;
+        return keywords.stream().anyMatch(target::contains);
     }
 
     public List<RiskResource> resources() {
