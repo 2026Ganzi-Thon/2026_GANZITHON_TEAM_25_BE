@@ -28,8 +28,8 @@ docker compose up --build
 | 호출 | 요청 | 성공 응답 |
 |---|---|---|
 | `GET /auth/check-id?loginId=` | 쿼리 | 200 `{"available": true}` (쓸 수 있으면 `true`) |
-| `POST /auth/signup` | `{name, loginId, password, termsAgreed, privacyAgreed}` | 201 `{"userId": "..."}` |
-| `POST /auth/login` | `{loginId, password}` | 200 `{userId, accessToken, expiresAt, name}` |
+| `POST /auth/signup` | `{name, loginId, password, termsAgreed, privacyAgreed}` | 201 `{"userId": "...", "onboardingCompleted": false}` |
+| `POST /auth/login` | `{loginId, password}` | 200 `{userId, accessToken, expiresAt, name, onboardingCompleted}` |
 
 ```bash
 curl -X POST http://localhost:8081/auth/signup -H "Content-Type: application/json" \
@@ -114,7 +114,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 - `onboardingCompleted`는 저장된 플래그가 아니라 **`accessory`가 `null`이 아니면 `true`**로 계산된 값이다. 닮은 특징·편안한 성향은 건너뛰어도 완료 여부에 영향이 없다.
 - **장식 단계를 건너뛰거나 중간에 나가면 `accessory`가 `null`로 남아 온보딩이 계속 미완료가 된다.** 그래서 둘 중 하나로 FE와 합의해야 한다(2026-11-18 성준님 지적): ① 장식 단계의 "건너뛰기"를 눌러도 `{"accessory":"없음"}`을 보낸다 ② 장식을 온보딩의 마지막 필수 단계로 둔다. 서버는 어느 쪽이든 `"없음"`을 명시 값으로 받는다. 영어 `"none"` 같은 값은 허용 목록 밖이라 `400 VALIDATION_ERROR`다.
 - 허용 목록 밖의 값은 `400 VALIDATION_ERROR`, `field`에 해당 필드명.
-- 앱 재시작 때 토큰을 재사용해 로그인 API를 다시 안 부르는 경우를 위해, `onboardingCompleted`는 로그인·회원가입 응답에도 같은 규칙으로 들어간다(성준님 작업).
+- 앱을 다시 켤 때(토큰 재사용으로 로그인 API를 안 부를 때)는 `GET /mongle-profile`의 `onboardingCompleted`로 판단한다. 로그인 응답에도 같은 값이 들어 있어 로그인 직후에는 추가 호출 없이 바로 분기할 수 있다. 회원가입 응답의 값은 항상 `false`다(가입 직후엔 프로필이 없다).
 
 ## 4. 공감 대화(reflections)에서 꼭 알아둘 것
 
