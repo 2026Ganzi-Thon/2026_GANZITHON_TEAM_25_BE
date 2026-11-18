@@ -7,6 +7,7 @@ import com.mongle.backend.auth.dto.SignupResponse;
 import com.mongle.backend.common.error.ApiException;
 import com.mongle.backend.common.error.ErrorCode;
 import com.mongle.backend.common.security.JwtTokenProvider;
+import com.mongle.backend.profile.MongleProfileService;
 import java.nio.charset.StandardCharsets;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,17 +29,20 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final AccountRateLimiter rateLimiter;
+    private final MongleProfileService mongleProfileService;
     private final String dummyHash;
 
     public AccountService(
             AppUserRepository appUserRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            AccountRateLimiter rateLimiter) {
+            AccountRateLimiter rateLimiter,
+            MongleProfileService mongleProfileService) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.rateLimiter = rateLimiter;
+        this.mongleProfileService = mongleProfileService;
         this.dummyHash = passwordEncoder.encode("timing-equalizer-not-a-real-password");
     }
 
@@ -66,7 +70,7 @@ public class AccountService {
         } catch (DataIntegrityViolationException e) {
             throw duplicateLoginId();
         }
-        return new SignupResponse(user.getUserId());
+        return SignupResponse.justRegistered(user.getUserId());
     }
 
     @Transactional
@@ -93,7 +97,9 @@ public class AccountService {
         rateLimiter.reset(AccountRateLimiter.Scope.LOGIN_FAILURE, loginId);
         user.touch();
         String token = jwtTokenProvider.generate(user.getUserId());
-        return new LoginResponse(user.getUserId(), token, jwtTokenProvider.expirationFor(token), user.getName());
+        boolean onboardingCompleted = mongleProfileService.isOnboardingCompleted(user.getUserId());
+        return new LoginResponse(
+                user.getUserId(), token, jwtTokenProvider.expirationFor(token), user.getName(), onboardingCompleted);
     }
 
     /** BCrypt는 72바이트 뒤를 무시하거나 구현에 따라 예외를 던진다 — 비교는 항상 안전한 길이로 하고, 초과 입력은 위에서 실패로 처리한다. */

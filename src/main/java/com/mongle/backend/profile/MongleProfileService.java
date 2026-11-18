@@ -20,6 +20,18 @@ public class MongleProfileService {
         return MongleProfileResponse.from(findOrCreateDefault(userId));
     }
 
+    /**
+     * 로그인 응답용 조회 전용 메서드. 위의 get()은 row가 없으면 기본 row를 새로 만들기 때문에 로그인에서 쓰면 안 된다 —
+     * 로그인만 했는데 빈 프로필 row가 생기면 안 된다. row가 없으면 그냥 미완료(false)다.
+     * 완료 규칙 자체는 MongleProfile.isOnboardingCompleted() 한 곳에만 두고 여기서는 위임만 한다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isOnboardingCompleted(String userId) {
+        return mongleProfileRepository.findById(userId)
+                .map(MongleProfile::isOnboardingCompleted)
+                .orElse(false);
+    }
+
     @Transactional
     public MongleProfileResponse update(String userId, UpdateMongleProfileRequest request) {
         if (!mongleProfileRepository.existsById(userId)) {

@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -89,10 +90,11 @@ class AccountControllerTest extends AbstractIntegrationTest {
     // ---------- 가입 ----------
 
     @Test
-    void 가입하면_201과_userId만_돌려주고_토큰도_비밀번호도_담지_않는다() throws Exception {
+    void 가입하면_201과_userId_onboardingCompleted_false를_돌려주고_토큰도_비밀번호도_담지_않는다() throws Exception {
         signup("홍길동", newLoginId(), PASSWORD, true, true)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value(notNullValue()))
+                .andExpect(jsonPath("$.onboardingCompleted").value(false))
                 .andExpect(jsonPath("$.accessToken").doesNotExist())
                 .andExpect(content().string(not(containsString(PASSWORD))));
     }
@@ -241,6 +243,56 @@ class AccountControllerTest extends AbstractIntegrationTest {
     void 로그인_요청에_아이디나_비밀번호가_비어_있으면_400이다() throws Exception {
         login("", PASSWORD, newClient()).andExpect(status().isBadRequest());
         login(newLoginId(), "", newClient()).andExpect(status().isBadRequest());
+    }
+
+    // ---------- 로그인 응답의 온보딩 완료 여부 ----------
+
+    private String loginToken(String loginId) throws Exception {
+        String response = login(loginId, PASSWORD, newClient()).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("accessToken").asText();
+    }
+
+    private void patchProfile(String token, String json) throws Exception {
+        mockMvc.perform(patch("/mongle-profile").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 프로필을_만든_적_없는_계정은_로그인_응답이_onboardingCompleted_false이고_로그인이_프로필_row를_만들지_않는다() throws Exception {
+        String loginId = newLoginId();
+        String userId = signupOk(loginId);
+
+        login(loginId, PASSWORD, newClient())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.onboardingCompleted").value(false));
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM mongle_profile WHERE user_id = ?", Integer.class, userId);
+        assertThat(rows).as("로그인만 했을 때 빈 프로필 row가 생기면 안 된다").isZero();
+    }
+
+    @Test
+    void 장식을_저장한_뒤_다시_로그인하면_onboardingCompleted_true다() throws Exception {
+        String loginId = newLoginId();
+        signupOk(loginId);
+        patchProfile(loginToken(loginId), "{\"accessory\":\"없음\"}");
+
+        login(loginId, PASSWORD, newClient())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.onboardingCompleted").value(true));
+    }
+
+    @Test
+    void 닮은_특징과_성향만_저장하고_장식이_없으면_로그인_응답은_onboardingCompleted_false다() throws Exception {
+        String loginId = newLoginId();
+        signupOk(loginId);
+        patchProfile(loginToken(loginId), "{\"similarityTrait\":\"잘 웃기\",\"comfortStyle\":\"부드럽고 다정함\"}");
+
+        login(loginId, PASSWORD, newClient())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.onboardingCompleted").value(false));
     }
 
     // ---------- 호출 제한 ----------
