@@ -132,7 +132,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 - **`riskDetected: true`면 `riskResources`를 화면에 보여준다.** 서버 응답 값을 그대로 쓰는 걸 권장한다(번호가 바뀌어도 서버만 고치면 됨). 대화는 끊지 않고 이어가며, 화면을 강제로 전환하지는 않는다.
 - **응답 시간은 평균 5초 안팎**(2026-11-13 실측 15건: 평균 5.2초, 최대 7.6초)이다. 서버 쪽 Gemini 타임아웃이 8초이므로 **클라이언트 타임아웃은 10초 이상**으로 두고 로딩 상태를 보여줘야 한다.
 - **Gemini가 실패해도 500이 아니라 200**이다. 이때 `reply`는 고정 문구("지금은 대답이 잘 안 떠올라…")이고, 응답만 봐서는 폴백인지 구분되지 않는다. 위험 신호는 폴백 상황에서도 키워드 기준으로 `riskDetected`가 유지된다.
-- 한 세션에서 최대 **20회**까지 가능하고 초과하면 429 `RATE_LIMITED`다. 이미 끝난 세션이면 409 `CONFLICT`.
+- 한 세션에서 최대 **50회**까지 가능하고 초과하면 429 `RATE_LIMITED`다. 이미 끝난 세션이면 409 `CONFLICT`.
 - "이번만 이야기하기"는 `selectedMemoryIds`를 **항상 빈 배열**로 보낸다.
 
 ## 5. 에러 포맷 (모든 엔드포인트 공통)
@@ -148,7 +148,7 @@ curl -X POST http://localhost:8081/auth/login -H "Content-Type: application/json
 | 403 | `FORBIDDEN` | 남의 세션·기억 접근 |
 | 404 | `NOT_FOUND` | 없는 리소스, 만료된 미리보기 |
 | 409 | `CONFLICT` | 끝난 세션에 reflections 요청 / 가입 때 이미 있는 아이디(`field: loginId`) |
-| 429 | `RATE_LIMITED` | 세션당 reflections 20회 초과 / 로그인·가입·중복확인 호출 제한 / 같은 아이디로 로그인 10회 실패 |
+| 429 | `RATE_LIMITED` | 세션당 reflections 50회 초과 / 로그인·가입·중복확인 호출 제한 / 같은 아이디로 로그인 10회 실패 |
 | 500 | `INTERNAL_ERROR` | 서버 오류(고정 문구) |
 
 화면 분기에는 `error` 코드를 쓰고, `message`는 보여줘도 되는 한글 문장이다.
