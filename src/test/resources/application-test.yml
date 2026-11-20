@@ -13,6 +13,14 @@ mongle:
     secret: test-only-secret-key-not-for-production-use-0123456789
     expiration-days: 365
   auth:
+    # 계정 호출 제한: 429를 검증하는 테스트(AccountControllerTest)가 이 숫자(가입 30·중복확인 120·로그인 60)를 기준으로
+    # 요청을 보내므로, 운영 값(application.yml)과 일부러 다르게 고정해 둔다.
+    account-rate-limit:
+      signup-ip-per-window: 30
+      check-id-ip-per-window: 120
+      login-ip-per-window: 60
+      login-failure-per-id: 10
+      window-minutes: 10
     anonymous-rate-limit:
       max-per-window: 30
       window-minutes: 10
